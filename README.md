@@ -138,7 +138,7 @@ Once the server is running, you can interact with PDF tools through natural lang
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 
 ## ⚠️ Security Notice
