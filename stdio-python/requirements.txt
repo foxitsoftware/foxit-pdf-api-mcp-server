@@ -1,0 +1,4 @@
+# Core dependencies for Document Conversion Agent
+httpx>=0.23.0  # HTTP client used for Foxit Cloud API requests
+mcp-server>=0.1.0  # Model Context Protocol server framework
+fastmcp>=0.1.0  # FastMCP library for MCP server implementation
