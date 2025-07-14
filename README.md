@@ -1,0 +1,1 @@
+# foxit-pdf-api-mcp-server
