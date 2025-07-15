@@ -102,13 +102,14 @@ The configuration will be saved as:
     ]
 }
 ```
+Please visit [VS Code settings document](https://code.visualstudio.com/docs/configure/settings) for more details on MCP server configuration.
 
 ## 🎯 Usage
 
 ### Starting the Server
 
 1. **Using VS Code Interface**:
-   - Open `.vscode/mcp.json` or your user settings
+   - Open `mcp.json` or `settings.json` file where you configured the MCP server
    - Click the **Start** button that appears above the server configuration
    - Enter your credentials when prompted (stored securely for future use)
 
