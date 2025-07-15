@@ -28,7 +28,7 @@ The Foxit Cloud API MCP Server provides the following tools for PDF manipulation
 Before getting started, ensure you have:
 
 - **Python 3.10 or higher** installed and added to your PATH
-- **Visual Studio Code** with the GitHub Copilot extension
+- **Visual Studio Code** with the GitHub Copilot extension which supports Agent Mode and Model Context Protocol (MCP) capabilities.
 - **pip** package manager (latest version recommended)
 - **Foxit Cloud API credentials** (Client ID and Client Secret)
 
@@ -49,14 +49,18 @@ Before getting started, ensure you have:
    cd foxit-pdf-api-mcp-server/stdio-python
    ```
 
-2. Build the package:
+2. Ensure you have `setuptools` installed:
+   ```bash
+   pip install setuptools wheel
+   ```
+   and then build the package by following commands:
    ```bash
    python setup.py sdist bdist_wheel
    ```
 
 3. Install the package:
    ```bash
-   pip install dist/foxit_pdf_cloudapi-1.0.3-py3-none-any.whl
+   pip install ./dist/foxit_pdf_cloudapi-1.0.0-py3-none-any.whl
    ```
    > **Note**: Replace the version number with the actual version generated during build.
 
@@ -80,9 +84,7 @@ Before getting started, ensure you have:
    - **Workspace Setting**: Project-specific configuration
 
 6. When prompted, enter your Foxit Cloud API credentials
-
 The configuration will be saved as:
-
 ```json
 {
     "version": "1.0",
@@ -138,7 +140,7 @@ Once the server is running, you can interact with PDF tools through natural lang
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 
 ## ⚠️ Security Notice

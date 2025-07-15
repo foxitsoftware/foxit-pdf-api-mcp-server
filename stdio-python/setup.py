@@ -3,7 +3,7 @@ import os
 
 setup(
     name="foxit-pdf-cloudapi",  
-    version="1.0.2", 
+    version="1.0.0", 
     author="Foxit Software Inc.",
     author_email="support@foxitsoftware.com",  
     description="A Python library for PDF manipulation using cloud APIs",  
