@@ -39,7 +39,7 @@ Before getting started, ensure you have:
 1. Visit the [Foxit Cloud API portal](https://www.foxit.com/api/pdf-api/)
 2. Sign up for a free account
 3. Obtain your **Client ID** and **Client Secret**
-4. The offical host URL for the API is `https://na1.fusion.foxit.com/pdf-services`
+4. The offical host URL for the API is `https://na1.fusion.foxit.com/pdf-services/api`
 
 ### Step 2: Build and Install the Package
 
@@ -94,7 +94,7 @@ The configuration will be saved as:
     "command": "foxit-cloudapi-mcp-service",
     "args": [
         "--host",
-        "https://na1.fusion.foxit.com/pdf-services",
+        "https://na1.fusion.foxit.com/pdf-services/api",
         "--client_id",
         "${input:client-id}",
         "--client_secret",
@@ -125,7 +125,7 @@ Once the server is running, you can interact with PDF tools through natural lang
 
 ```
 @copilot /agent Convert this PDF to Word format
-@copilot /agent Extract text from the uploaded PDF
+@copilot /agent Compress the uploaded PDF
 @copilot /agent Merge these PDF files
 ```
 
