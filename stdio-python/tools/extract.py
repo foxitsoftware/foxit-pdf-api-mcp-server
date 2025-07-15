@@ -3,7 +3,7 @@ from server.cloudapi_server import FoxitCloudAPI
 
 def extract(input_file, output_dir, password = "",extract_type="TEXT", page_range="all"):
     """
-    Extract content (text, images, or pages) from a PDF file using Foxit Cloud API.
+    Extract content (text, images) from a PDF file using Foxit Cloud API.
 
     Args:
         input_file (str): Path to the input PDF file.
