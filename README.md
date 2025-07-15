@@ -1,4 +1,4 @@
-# Foxit Cloud API MCP Server
+<img width="568" height="150" alt="image" src="https://github.com/user-attachments/assets/bb3d5c17-4823-4806-a929-938e218b8d83" /># Foxit Cloud API MCP Server
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -76,7 +76,7 @@ Before getting started, ensure you have:
 
 4. Enter the following command and arguments:
    ```bash
-   foxit-cloudapi-mcp-service --host https://na1.fusion.foxit.com/pdf-services --client_id ${input:client-id} --client_secret ${input:client-secret}
+   foxit-cloudapi-mcp-service --host https://na1.fusion.foxit.com/pdf-services/api --client_id ${input:client-id} --client_secret ${input:client-secret}
    ```
 
 5. Choose your configuration scope:
