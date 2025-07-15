@@ -1,4 +1,4 @@
-<img width="568" height="150" alt="image" src="https://github.com/user-attachments/assets/bb3d5c17-4823-4806-a929-938e218b8d83" /># Foxit Cloud API MCP Server
+# Foxit Cloud API MCP Server
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
