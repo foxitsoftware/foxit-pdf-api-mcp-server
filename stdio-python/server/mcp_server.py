@@ -73,14 +73,6 @@ async def convert_file_to_pdf(file_path: str, output_path: str) -> str:
         Example:
             convert_file_to_pdf('/document.docx', '/output.pdf')  # Converts a docx file to PDF
 
-        Possible Errors:
-            - If the file format is not supported, a format error will be returned.
-            - If the file path is invalid, a file not found exception will be raised.
-
-        Solutions:
-            - Ensure the input file format is in the supported list.
-            - Verify that the file path is correct.
-
         Limitations:
             - File size should not exceed 100MB.
         """
@@ -105,13 +97,6 @@ async def convert_url_to_pdf(url: str, output_path: str) -> str:
         Example:
             convert_url_to_pdf('https://example.com', '/output.pdf')  # Converts the web page to PDF
 
-        Possible Errors:
-            - If the URL is invalid or inaccessible, a network error will be returned.
-            - If the web page cannot be rendered, a conversion error may occur.
-
-        Solutions:
-            - Ensure the URL is correct and the web page is accessible.
-            - Check for any restrictions on the web page that might prevent conversion.
         """
         try:
             convert_url(url, output_path)
@@ -159,14 +144,6 @@ async def combine_pdfs(input_files: list, output_file: str, config=None) -> str:
         Example:
             combine_pdfs(['/file1.pdf', '/file2.pdf'], '/combined.pdf', config={"addBookmark": true})
 
-        Possible Errors:
-            - If any input file is not a valid PDF, a validation error will be returned.
-            - If the output path is invalid, a file system error will occur.
-
-        Solutions:
-            - Ensure all input files are valid PDFs and accessible.
-            - Verify that the output path is writable.
-
         Limitations:
             - It is recommended to combine no more than 100 files at a time to avoid performance issues.
             - File size should not exceed 100MB to prevent processing failures.
@@ -202,14 +179,6 @@ async def compare_pdfs(pdf1: str, pdf2: str, output_file: str, config=None) -> s
         Example:
             compare_pdfs('/file1.pdf', '/file2.pdf', '/diff.pdf', config={"compareType": "TEXT", "resultType": "PDF"})
 
-        Possible Errors:
-            - If either PDF file is invalid or inaccessible, a file error will be returned.
-            - If the comparison type is not supported, a configuration error will occur.
-
-        Solutions:
-            - Ensure both PDF files are valid and accessible.
-            - Verify that the config parameters are correctly set.
-
         Limitations:
             - File size should not exceed 100MB. 
         """
@@ -238,14 +207,6 @@ async def compress_pdf(input_file: str, output_file: str, compression_level: str
         Example:
             compress_pdf('/input.pdf', '/output.pdf', 'HIGH')  # Compress PDF with high compression
 
-        Possible Errors:
-            - If the input file is not a valid PDF, a format error will be returned.
-            - If the compression level is invalid, a configuration error will occur.
-
-        Solutions:
-            - Ensure the input file is a valid PDF.
-            - Use one of the supported compression levels: 'HIGH', 'MEDIUM', or 'LOW'.
-
         Limitations:
             - File size should not exceed 100MB.
         """
@@ -257,7 +218,7 @@ async def compress_pdf(input_file: str, output_file: str, compression_level: str
 
 async def extract_pdf(input_file: str, output_dir: str, password:str = "",extract_type: str = "TEXT", page_range: str = "all") -> str:
         """
-        Extract content (text, images, or pages) from a PDF file using the Foxit Cloud API.
+        Extract content (text, images) from a PDF file using the Foxit Cloud API.
         The extracted content is saved in the specified output directory.
         Note: 
         Args:
@@ -278,14 +239,6 @@ async def extract_pdf(input_file: str, output_dir: str, password:str = "",extrac
 
         Example:
             extract_pdf('/input.pdf', '/output/', extract_type='TEXT', page_range='1-3')  # Extract text from pages 1 to 3
-
-        Possible Errors:
-            - If the input file is not a valid PDF, a format error will be returned.
-            - If the page range is invalid, a range error will occur.
-
-        Solutions:
-            - Ensure the input file is a valid PDF.
-            - Specify a valid page range (e.g., '1-5', 'all').
 
         Limitations:
             - File size should not exceed 100MB.
@@ -312,14 +265,6 @@ async def flatten_pdf(input_file: str, output_file: str,password:str = "") -> st
         Example:
             flatten_pdf('/input.pdf', '/output.pdf')  # Flatten the PDF to remove interactive elements
 
-        Possible Errors:
-            - If the input file is not a valid PDF, a format error will be returned.
-            - If the file is password-protected, a permission error may occur.
-
-        Solutions:
-            - Ensure the input file is a valid PDF.
-            - If the PDF is password-protected, remove the password first using `remove_pdf_password`.
-
         Limitations:
             - File size should not exceed 100MB.
             - Flattening may alter the appearance of some elements, such as form fields.
@@ -344,14 +289,6 @@ async def linearize_pdf(input_file: str, output_file: str) -> str:
 
         Example:
             linearize_pdf('/input.pdf', '/output.pdf')  # Linearize the PDF for fast web viewing
-
-        Possible Errors:
-            - If the input file is not a valid PDF, a format error will be returned.
-            - If the file is already linearized, the operation may have no effect.
-
-        Solutions:
-            - Ensure the input file is a valid PDF.
-            - Check if the PDF is already optimized for web viewing.
 
         Limitations:
             - File size should not exceed 100MB.
@@ -378,14 +315,6 @@ async def remove_pdf_password(input_file: str, output_file: str, password: str) 
 
         Example:
             remove_pdf_password('/input.pdf', '/output.pdf', 'owner_password')  # Remove password protection
-
-        Possible Errors:
-            - If the provided password is incorrect, a permission error will be returned.
-            - If the file is not encrypted, the operation will fail.
-
-        Solutions:
-            - Ensure the correct owner password is provided.
-            - Verify that the PDF is actually password-protected.
 
         Limitations:
             - File size should not exceed 100MB.
@@ -425,14 +354,6 @@ async def protect_pdf(input_file: str, output_file: str, password: str, owner_pa
         Example:
             protect_pdf('/input.pdf', '/output.pdf', 'user_pass', 'owner_pass', userPermissions=['PRINT_NORMAL_QUALITY','EDIT_CONTENT'], cipher='AES_256', encryptMetadata='true')
 
-        Possible Errors:
-            - If the user password and owner password are the same, an error will be raised.
-            - If the input file is already encrypted, the operation may fail.
-
-        Solutions:
-            - Ensure the user password and owner password are different.
-            - Remove any existing encryption before applying new protection.
-
         Limitations:
             - File size should not exceed 100MB.
         """
@@ -460,14 +381,6 @@ async def split_pdf(input_file: str, output_dir: str, split_by_pages: int) -> st
 
         Example:
             split_pdf('/input.pdf', '/output/', 2)  # Split the PDF into files with 2 pages each
-
-        Possible Errors:
-            - If the input file is not a valid PDF, a format error will be returned.
-            - If the split_by_pages value is invalid (e.g., less than 1), a configuration error will occur.
-
-        Solutions:
-            - Ensure the input file is a valid PDF.
-            - Set split_by_pages to a positive integer.
 
         Limitations:
             - File size should not exceed 100MB.
@@ -514,14 +427,6 @@ async def manipulate_pdf(input_file: str, output_file: str, operations: list) ->
                 {"type": "ROTATE_PAGES", "pages": [1, 2], "rotation": "ROTATE_CLOCKWISE_90"}
             ]
             manipulate_pdf('/input.pdf', '/output.pdf', operations)
-
-        Possible Errors:
-            - If the input file is not a valid PDF, a format error will be returned.
-            - If page numbers or positions are out of range, a range error will occur.
-
-        Solutions:
-            - Ensure the input file is a valid PDF.
-            - Verify that all page numbers and positions are within the document's page range.
 
         Limitations:
             - File size should not exceed 100MB.
