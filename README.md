@@ -82,6 +82,8 @@ Before getting started, ensure you have:
 5. Choose your configuration scope:
    - **User Setting**: Global configuration for all VS Code projects
    - **Workspace Setting**: Project-specific configuration
+> **Note**:Please visit [VS Code settings document](https://code.visualstudio.com/docs/configure/settings) for more details on MCP server configuration.
+
 
 6. When prompted, enter your Foxit Cloud API credentials.The configuration will be saved as:
 ```json
@@ -102,7 +104,6 @@ Before getting started, ensure you have:
 }
 ```
  > **Note**:  Two placeholders (${input:client-id} and ${input:client-id}) need to be manually replaced with your actual credentials.
-Please visit [VS Code settings document](https://code.visualstudio.com/docs/configure/settings) for more details on MCP server configuration.
 
 ## 🎯 Usage
 
