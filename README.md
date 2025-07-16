@@ -125,6 +125,7 @@ Once the server is running, you can interact with PDF tools through natural lang
 
 ```
 @copilot /agent Convert this PDF to Word format
+@copilot /agent combine foo.pdf and goo.pdf and name it something.pdf
 @copilot /agent Compress the uploaded PDF
 @copilot /agent Merge these PDF files
 ```
