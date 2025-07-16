@@ -83,8 +83,7 @@ Before getting started, ensure you have:
    - **User Setting**: Global configuration for all VS Code projects
    - **Workspace Setting**: Project-specific configuration
 
-6. When prompted, enter your Foxit Cloud API credentials
-The configuration will be saved as:
+6. When prompted, enter your Foxit Cloud API credentials.The configuration will be saved as:
 ```json
 {
     "version": "1.0",
@@ -98,10 +97,11 @@ The configuration will be saved as:
         "--client_id",
         "${input:client-id}",
         "--client_secret",
-        "${input:client-secret}"
+        "${input:client-id}"
     ]
 }
 ```
+ > **Note**:  Two placeholders (${input:client-id} and ${input:client-id}) need to be manually replaced with your actual credentials.
 Please visit [VS Code settings document](https://code.visualstudio.com/docs/configure/settings) for more details on MCP server configuration.
 
 ## 🎯 Usage
