@@ -1,0 +1,5 @@
+{
+    "FOXIT_CLOUD_API_HOST": "https://fusion-qa.foxit.com/cloud-api/api",
+    "FOXIT_CLOUD_API_CLIENT_ID": "your-client-id",
+    "FOXIT_CLOUD_API_CLIENT_SECRET": "your-client-secret"
+}
