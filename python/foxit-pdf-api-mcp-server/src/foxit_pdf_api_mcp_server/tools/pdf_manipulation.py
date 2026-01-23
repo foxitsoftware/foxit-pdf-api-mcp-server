@@ -1,14 +1,14 @@
 """PDF manipulation tools: merge, split, extract, compress, etc."""
 
+import json
 from typing import Any, Optional
 
 from ..server import client, mcp
 from ..utils import execute_and_wait
-from ._base import format_error_response, format_success_response
 
 
 @mcp.tool()
-async def pdf_merge(document_ids: list[str]) -> str:
+async def pdf_merge(documents: list[dict[str, Any]]) -> str:
     """
     Merge multiple PDF documents into a single PDF.
 
@@ -21,28 +21,43 @@ async def pdf_merge(document_ids: list[str]) -> str:
     Maximum file size: 100MB per document
 
     Args:
-        document_ids: List of document IDs to merge (in order)
+        documents: Array of documents to merge. Each item: {documentId, password?}
 
     Returns:
         JSON string with success status, taskId, and resultDocumentId
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_merge(document_ids))
+        result = await execute_and_wait(client, lambda: client.pdf_merge(documents))
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"PDFs merged successfully. Download using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result.get("taskId", ""),
+                "resultDocumentId": result.get("resultDocumentId"),
+                "documentsCount": len(documents),
+                "message": f"{len(documents)} PDFs merged successfully. Download using documentId: {result.get('resultDocumentId')}",
+            },
+            indent=2,
         )
     except Exception as error:
-        return format_error_response(error)
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(error),
+                "code": getattr(error, "code", "MERGE_FAILED"),
+                "taskId": getattr(error, "taskId", None) or getattr(error, "task_id", None),
+            },
+            indent=2,
+        )
 
 
 @mcp.tool()
 async def pdf_split(
-    document_id: str,
-    page_ranges: Optional[str] = None,
-    split_by_pages: Optional[int] = None,
+    documentId: str,
+    splitStrategy: str,
+    pageCount: Optional[int] = None,
+    pageRanges: Optional[list[str]] = None,
+    password: Optional[str] = None,
 ) -> str:
     """
     Split a PDF document into multiple documents.
@@ -60,34 +75,53 @@ async def pdf_split(
     Maximum file size: 100MB
 
     Args:
-        document_id: Document ID of the PDF to split
-        page_ranges: Page ranges to extract (e.g., "1-5,10-15")
-        split_by_pages: Number of pages per output file (alternative to page_ranges)
+        documentId: Document ID of the PDF to split
+        splitStrategy: Strategy for splitting the PDF (BY_PAGE_COUNT | BY_PAGE_RANGES | EVERY_PAGE)
+        pageCount: Pages per chunk (required for BY_PAGE_COUNT)
+        pageRanges: Page ranges (required for BY_PAGE_RANGES, e.g., ["1-3", "4-10"])
+        password: Password if PDF is password-protected
 
     Returns:
         JSON string with success status, taskId, and resultDocumentId
         Note: Result is a ZIP file containing the split PDFs
     """
     try:
-        config = {}
-        if page_ranges:
-            config["pageRanges"] = page_ranges
-        elif split_by_pages:
-            config["splitByPages"] = split_by_pages
+        config: dict[str, Any] = {"pageCount": pageCount, "pageRanges": pageRanges}
 
-        result = await execute_and_wait(client, lambda: client.pdf_split(document_id, config))
+        result = await execute_and_wait(
+            client,
+            lambda: client.pdf_split(documentId, splitStrategy, config, password),
+        )
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"PDF split successfully. Download ZIP file using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result.get("taskId", ""),
+                "resultDocumentId": result.get("resultDocumentId"),
+                "strategy": splitStrategy,
+                "message": f"PDF split successfully. Download ZIP using documentId: {result.get('resultDocumentId')}",
+            },
+            indent=2,
         )
     except Exception as error:
-        return format_error_response(error)
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(error),
+                "code": getattr(error, "code", "SPLIT_FAILED"),
+                "taskId": getattr(error, "taskId", None) or getattr(error, "task_id", None),
+            },
+            indent=2,
+        )
 
 
 @mcp.tool()
-async def pdf_extract(document_id: str, page_range: str) -> str:
+async def pdf_extract(
+    documentId: str,
+    extractType: str,
+    pageRanges: Optional[str] = None,
+    password: Optional[str] = None,
+) -> str:
     """
     Extract specific pages from a PDF document.
 
@@ -99,27 +133,49 @@ async def pdf_extract(document_id: str, page_range: str) -> str:
     Maximum file size: 100MB
 
     Args:
-        document_id: Document ID of the PDF
-        page_range: Pages to extract (e.g., "1,3,5-10", "1-5", "all")
+        documentId: Document ID of the PDF
+        extractType: Type of content to extract (TEXT | IMAGES | PAGES)
+        pageRanges: Page ranges to extract from (e.g., "1-3,5,7-9")
+        password: Password if PDF is password-protected
 
     Returns:
         JSON string with success status, taskId, and resultDocumentId
     """
     try:
-        config = {"pageRange": page_range}
-        result = await execute_and_wait(client, lambda: client.pdf_extract(document_id, config))
+        config = {"pageRanges": pageRanges} if pageRanges is not None else {}
+        result = await execute_and_wait(
+            client,
+            lambda: client.pdf_extract(documentId, extractType, config, password),
+        )
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"Pages extracted successfully. Download using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result.get("taskId", ""),
+                "resultDocumentId": result.get("resultDocumentId"),
+                "extractType": extractType,
+                "message": f"Content extracted successfully. Download using documentId: {result.get('resultDocumentId')}",
+            },
+            indent=2,
         )
     except Exception as error:
-        return format_error_response(error)
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(error),
+                "code": getattr(error, "code", "EXTRACT_FAILED"),
+                "taskId": getattr(error, "taskId", None) or getattr(error, "task_id", None),
+            },
+            indent=2,
+        )
 
 
 @mcp.tool()
-async def pdf_compress(document_id: str) -> str:
+async def pdf_compress(
+    documentId: str,
+    compressionLevel: str,
+    password: Optional[str] = None,
+) -> str:
     """
     Compress a PDF document to reduce file size.
 
@@ -132,25 +188,43 @@ async def pdf_compress(document_id: str) -> str:
     Maximum file size: 100MB
 
     Args:
-        document_id: Document ID of the PDF to compress
+        documentId: Document ID of the PDF to compress
+        compressionLevel: Compression level (HIGH | MEDIUM | LOW)
+        password: Password if PDF is password-protected
 
     Returns:
         JSON string with success status, taskId, and resultDocumentId
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_compress(document_id))
+        result = await execute_and_wait(
+            client,
+            lambda: client.pdf_compress(documentId, compressionLevel, password),
+        )
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"PDF compressed successfully. Download using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result.get("taskId", ""),
+                "resultDocumentId": result.get("resultDocumentId"),
+                "compressionLevel": compressionLevel,
+                "message": f"PDF compressed successfully. Download using documentId: {result.get('resultDocumentId')}",
+            },
+            indent=2,
         )
     except Exception as error:
-        return format_error_response(error)
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(error),
+                "code": getattr(error, "code", "COMPRESS_FAILED"),
+                "taskId": getattr(error, "taskId", None) or getattr(error, "task_id", None),
+            },
+            indent=2,
+        )
 
 
 @mcp.tool()
-async def pdf_flatten(document_id: str) -> str:
+async def pdf_flatten(documentId: str, password: Optional[str] = None) -> str:
     """
     Flatten a PDF document (merge all layers and form fields).
 
@@ -168,25 +242,41 @@ async def pdf_flatten(document_id: str) -> str:
     Maximum file size: 100MB
 
     Args:
-        document_id: Document ID of the PDF to flatten
+        documentId: Document ID of the PDF to flatten
+        password: Password if PDF is password-protected
 
     Returns:
         JSON string with success status, taskId, and resultDocumentId
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_flatten(document_id))
+        result = await execute_and_wait(
+            client,
+            lambda: client.pdf_flatten(documentId, password),
+        )
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"PDF flattened successfully. Download using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result.get("taskId", ""),
+                "resultDocumentId": result.get("resultDocumentId"),
+                "message": f"PDF flattened successfully. Download using documentId: {result.get('resultDocumentId')}",
+            },
+            indent=2,
         )
     except Exception as error:
-        return format_error_response(error)
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(error),
+                "code": getattr(error, "code", "FLATTEN_FAILED"),
+                "taskId": getattr(error, "taskId", None) or getattr(error, "task_id", None),
+            },
+            indent=2,
+        )
 
 
 @mcp.tool()
-async def pdf_linearize(document_id: str) -> str:
+async def pdf_linearize(documentId: str) -> str:
     """
     Linearize a PDF document for fast web viewing.
 
@@ -204,34 +294,46 @@ async def pdf_linearize(document_id: str) -> str:
     Maximum file size: 100MB
 
     Args:
-        document_id: Document ID of the PDF to linearize
+        documentId: Document ID of the PDF to linearize
 
     Returns:
         JSON string with success status, taskId, and resultDocumentId
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_linearize(document_id))
+        result = await execute_and_wait(client, lambda: client.pdf_linearize(documentId))
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"PDF linearized successfully. Download using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result.get("taskId", ""),
+                "resultDocumentId": result.get("resultDocumentId"),
+                "message": f"PDF linearized successfully. Download using documentId: {result.get('resultDocumentId')}",
+            },
+            indent=2,
         )
     except Exception as error:
-        return format_error_response(error)
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(error),
+                "code": getattr(error, "code", "LINEARIZE_FAILED"),
+                "taskId": getattr(error, "taskId", None) or getattr(error, "task_id", None),
+            },
+            indent=2,
+        )
 
 
 @mcp.tool()
 async def pdf_watermark(
-    document_id: str,
+    documentId: str,
     content: str,
-    watermark_type: Optional[str] = None,
+    type: Optional[str] = None,
     position: Optional[str] = None,
     opacity: Optional[float] = None,
     rotation: Optional[int] = None,
-    font_size: Optional[int] = None,
+    fontSize: Optional[int] = None,
     color: Optional[str] = None,
-    page_ranges: Optional[str] = None,
+    pageRanges: Optional[str] = None,
     password: Optional[str] = None,
 ) -> str:
     """Add text or image watermark to PDF pages.
@@ -262,15 +364,15 @@ async def pdf_watermark(
     4. Download watermarked PDF using download_document tool
 
     Args:
-        document_id: Document ID of the PDF
+        documentId: Document ID of the PDF
         content: Watermark text or image documentId
-        watermark_type: Watermark type (TEXT or IMAGE, default: TEXT)
+        type: Watermark type (TEXT or IMAGE, default: TEXT)
         position: Watermark position (default: CENTER)
         opacity: Opacity 0.0-1.0 (default: 0.5)
         rotation: Rotation angle in degrees
-        font_size: Font size in points (for TEXT)
+        fontSize: Font size in points (for TEXT)
         color: Text color in hex (e.g., "#FF0000")
-        page_ranges: Pages to watermark (e.g., "1-3,5", default: all)
+        pageRanges: Pages to watermark (e.g., "1-3,5", default: all)
         password: Password if PDF is password-protected
 
     Returns:
@@ -278,39 +380,49 @@ async def pdf_watermark(
     """
     try:
         config: dict[str, Any] = {"content": content}
-        if watermark_type:
-            config["type"] = watermark_type
+        if type:
+            config["type"] = type
         if position:
             config["position"] = position
         if opacity is not None:
             config["opacity"] = opacity
         if rotation is not None:
             config["rotation"] = rotation
-        if font_size:
-            config["fontSize"] = font_size
+        if fontSize:
+            config["fontSize"] = fontSize
         if color:
             config["color"] = color
-        if page_ranges:
-            config["pageRanges"] = page_ranges
-        if password:
-            config["password"] = password
+        if pageRanges:
+            config["pageRanges"] = pageRanges
 
         result = await execute_and_wait(
-            client, lambda: client.pdf_watermark(document_id, config)
+            client, lambda: client.pdf_watermark(documentId, config, password)
         )
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"Watermark added successfully. Download using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result.get("taskId", ""),
+                "resultDocumentId": result.get("resultDocumentId"),
+                "message": f"Watermark added successfully. Download using documentId: {result.get('resultDocumentId')}",
+            },
+            indent=2,
         )
     except Exception as error:
-        return format_error_response(error)
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(error),
+                "code": getattr(error, "code", "WATERMARK_FAILED"),
+                "taskId": getattr(error, "taskId", None) or getattr(error, "task_id", None),
+            },
+            indent=2,
+        )
 
 
 @mcp.tool()
 async def pdf_manipulate(
-    document_id: str,
+    documentId: str,
     operations: list[dict[str, Any]],
     password: Optional[str] = None,
 ) -> str:
@@ -338,7 +450,7 @@ async def pdf_manipulate(
     3. Download modified PDF using download_document tool
 
     Args:
-        document_id: Document ID of the PDF to manipulate
+        documentId: Document ID of the PDF to manipulate
         operations: Array of page manipulation operations
         password: Password if PDF is password-protected
 
@@ -346,18 +458,27 @@ async def pdf_manipulate(
         JSON string with success status, taskId, and resultDocumentId
     """
     try:
-        config: dict[str, Any] = {"operations": operations}
-        if password:
-            config["password"] = password
-
         result = await execute_and_wait(
-            client, lambda: client.pdf_manipulate(document_id, config)
+            client, lambda: client.pdf_manipulate(documentId, operations, password)
         )
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"PDF manipulated successfully with {len(operations)} operations. Download using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result.get("taskId", ""),
+                "resultDocumentId": result.get("resultDocumentId"),
+                "operationsCount": len(operations),
+                "message": f"PDF manipulated successfully with {len(operations)} operations. Download using documentId: {result.get('resultDocumentId')}",
+            },
+            indent=2,
         )
     except Exception as error:
-        return format_error_response(error)
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(error),
+                "code": getattr(error, "code", "MANIPULATE_FAILED"),
+                "taskId": getattr(error, "taskId", None) or getattr(error, "task_id", None),
+            },
+            indent=2,
+        )

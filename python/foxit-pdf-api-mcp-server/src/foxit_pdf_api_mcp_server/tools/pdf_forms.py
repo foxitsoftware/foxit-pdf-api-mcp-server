@@ -1,15 +1,26 @@
 """PDF Forms tools for Foxit PDF API MCP Server."""
 
+import json
 from typing import Any, Optional
 
 from ..server import client, mcp
 from ..utils import execute_and_wait
-from ._base import format_error_response, format_success_response
+
+
+def _error_payload(error: Exception, default_code: str) -> str:
+    return json.dumps(
+        {
+            "success": False,
+            "error": str(error),
+            "code": getattr(error, "code", default_code),
+            **({"taskId": getattr(error, "task_id")} if hasattr(error, "task_id") else {}),
+        }
+    )
 
 
 @mcp.tool()
 async def export_pdf_form_data(
-    document_id: str, password: Optional[str] = None
+    documentId: str, password: Optional[str] = None
 ) -> str:
     """Extract form data from a PDF and return it as JSON.
 
@@ -57,21 +68,29 @@ async def export_pdf_form_data(
     """
     try:
         result = await execute_and_wait(
-            client, lambda: client.export_pdf_form_data(document_id, password)
+            client, lambda: client.export_pdf_form_data(documentId, password)
         )
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"Form data exported successfully. Download JSON using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result["taskId"],
+                "resultDocumentId": result.get("resultDocumentId"),
+                "message": (
+                    "Form data exported successfully. Download JSON using documentId: "
+                    f"{result.get('resultDocumentId')}"
+                ),
+            }
         )
     except Exception as error:
-        return format_error_response(error)
+        return _error_payload(error, "EXPORT_FORM_FAILED")
 
 
 @mcp.tool()
 async def import_pdf_form_data(
-    document_id: str, form_data: dict[str, Any], password: Optional[str] = None
+    documentId: str,
+    formData: dict[str, Any],
+    password: Optional[str] = None,
 ) -> str:
     """Populate a PDF form with data provided as JSON.
 
@@ -126,14 +145,20 @@ async def import_pdf_form_data(
     """
     try:
         result = await execute_and_wait(
-            client, lambda: client.import_pdf_form_data(document_id, form_data, password)
+            client, lambda: client.import_pdf_form_data(documentId, formData, password)
         )
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            fields_count=len(form_data),
-            message=f"Form data imported successfully. Download populated PDF using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result["taskId"],
+                "resultDocumentId": result.get("resultDocumentId"),
+                "fieldsCount": len(formData),
+                "message": (
+                    "Form data imported successfully. Download populated PDF using documentId: "
+                    f"{result.get('resultDocumentId')}"
+                ),
+            }
         )
     except Exception as error:
-        return format_error_response(error)
+        return _error_payload(error, "IMPORT_FORM_FAILED")

@@ -1,16 +1,27 @@
 """PDF Analysis tools for Foxit PDF API MCP Server."""
 
+import json
 from typing import Optional
 
 from ..server import client, mcp
 from ..utils import execute_and_wait
-from ._base import format_error_response, format_success_response
+
+
+def _error_payload(error: Exception, default_code: str) -> str:
+    return json.dumps(
+        {
+            "success": False,
+            "error": str(error),
+            "code": getattr(error, "code", default_code),
+            **({"taskId": getattr(error, "task_id")} if hasattr(error, "task_id") else {}),
+        }
+    )
 
 
 @mcp.tool()
 async def pdf_compare(
-    document_id1: str,
-    document_id2: str,
+    documentId1: str,
+    documentId2: str,
     password1: Optional[str] = None,
     password2: Optional[str] = None,
 ) -> str:
@@ -49,23 +60,29 @@ async def pdf_compare(
     """
     try:
         result = await execute_and_wait(
-            client, lambda: client.pdf_compare(document_id1, document_id2, password1, password2)
+            client, lambda: client.pdf_compare(documentId1, documentId2, password1, password2)
         )
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"PDFs compared successfully. Download comparison report using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result["taskId"],
+                "resultDocumentId": result.get("resultDocumentId"),
+                "message": (
+                    "PDFs compared successfully. Download comparison report using documentId: "
+                    f"{result.get('resultDocumentId')}"
+                ),
+            }
         )
     except Exception as error:
-        return format_error_response(error)
+        return _error_payload(error, "COMPARE_FAILED")
 
 
 @mcp.tool()
 async def pdf_ocr(
-    document_id: str,
+    documentId: str,
     languages: Optional[list[str]] = None,
-    page_ranges: Optional[str] = None,
+    pageRanges: Optional[str] = None,
     password: Optional[str] = None,
 ) -> str:
     """Perform OCR (Optical Character Recognition) on a PDF document.
@@ -108,29 +125,34 @@ async def pdf_ocr(
         JSON string with OCR result and download information
     """
     try:
-        config = {}
-        if languages:
-            config["languages"] = languages
-        if page_ranges:
-            config["pageRanges"] = page_ranges
-
         result = await execute_and_wait(
-            client, lambda: client.pdf_ocr(document_id, config if config else None, password)
+            client,
+            lambda: client.pdf_ocr(
+                documentId,
+                {"languages": languages, "pageRanges": pageRanges},
+                password,
+            ),
         )
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            languages=languages or ["en-US"],
-            message=f"OCR completed successfully. Download searchable PDF using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result["taskId"],
+                "resultDocumentId": result.get("resultDocumentId"),
+                "languages": languages or ["en-US"],
+                "message": (
+                    "OCR completed successfully. Download searchable PDF using documentId: "
+                    f"{result.get('resultDocumentId')}"
+                ),
+            }
         )
     except Exception as error:
-        return format_error_response(error)
+        return _error_payload(error, "OCR_FAILED")
 
 
 @mcp.tool()
 async def pdf_structural_analysis(
-    document_id: str, password: Optional[str] = None
+    documentId: str, password: Optional[str] = None
 ) -> str:
     """Perform comprehensive structural analysis on a PDF document.
 
@@ -181,13 +203,19 @@ async def pdf_structural_analysis(
     """
     try:
         result = await execute_and_wait(
-            client, lambda: client.pdf_structural_analysis(document_id, password)
+            client, lambda: client.pdf_structural_analysis(documentId, password)
         )
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"Structural analysis completed. Download ZIP archive using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result["taskId"],
+                "resultDocumentId": result.get("resultDocumentId"),
+                "message": (
+                    "Structural analysis completed. Download ZIP archive using documentId: "
+                    f"{result.get('resultDocumentId')}"
+                ),
+            }
         )
     except Exception as error:
-        return format_error_response(error)
+        return _error_payload(error, "ANALYSIS_FAILED")

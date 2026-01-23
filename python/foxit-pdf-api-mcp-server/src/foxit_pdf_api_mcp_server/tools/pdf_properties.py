@@ -1,17 +1,28 @@
 """PDF Properties tools for Foxit PDF API MCP Server."""
 
 import json
-from typing import Any
+from typing import Optional
 
 from ..server import client, mcp
-from ._base import format_error_response
+from ..utils import execute_and_wait
+
+
+def _error_payload(error: Exception, default_code: str) -> str:
+    return json.dumps(
+        {
+            "success": False,
+            "error": str(error),
+            "code": getattr(error, "code", default_code),
+            **({"taskId": getattr(error, "task_id")} if hasattr(error, "task_id") else {}),
+        }
+    )
 
 
 @mcp.tool()
 async def get_pdf_properties(
-    document_id: str,
-    include_extended_info: bool = True,
-    include_page_info: bool = True,
+    documentId: str,
+    includeExtendedInfo: Optional[bool] = None,
+    includePageInfo: Optional[bool] = None,
 ) -> str:
     """Extract comprehensive properties and metadata from a PDF document.
 
@@ -53,16 +64,26 @@ async def get_pdf_properties(
         JSON string containing PDF properties and metadata
     """
     try:
-        result = await client.get_pdf_properties(document_id)
+        result = await execute_and_wait(
+            client,
+            lambda: client.get_pdf_properties(
+                documentId,
+                {
+                    "includeExtendedInfo": True
+                    if includeExtendedInfo is None
+                    else includeExtendedInfo,
+                    "includePageInfo": True if includePageInfo is None else includePageInfo,
+                },
+            ),
+        )
 
-        # Format the response to include configuration info
-        response_data = {
-            "success": True,
-            "properties": result,
-            "documentId": document_id,
-            "message": "PDF properties extracted successfully",
-        }
-
-        return json.dumps(response_data, indent=2)
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result["taskId"],
+                "properties": result.get("resultData"),
+                "message": "PDF properties extracted successfully",
+            }
+        )
     except Exception as error:
-        return format_error_response(error)
+        return _error_payload(error, "ANALYSIS_FAILED")
