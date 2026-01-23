@@ -1,20 +1,29 @@
 """PDF security tools: protect and remove password protection."""
 
+import json
 from typing import Optional
 
 from ..server import client, mcp
 from ..utils import execute_and_wait
-from ._base import format_error_response, format_success_response
+
+
+def _error_payload(error: Exception, default_code: str) -> str:
+    return json.dumps(
+        {
+            "success": False,
+            "error": str(error),
+            "code": getattr(error, "code", default_code),
+            **({"taskId": getattr(error, "task_id")} if hasattr(error, "task_id") else {}),
+        }
+    )
 
 
 @mcp.tool()
 async def pdf_protect(
-    document_id: str,
+    documentId: str,
     user_password: Optional[str] = None,
     owner_password: Optional[str] = None,
-    allow_printing: bool = True,
-    allow_copying: bool = True,
-    allow_editing: bool = True,
+    permissions: Optional[list[str]] = None,
 ) -> str:
     """
     Add password protection and permissions to a PDF document.
@@ -37,43 +46,45 @@ async def pdf_protect(
     Maximum file size: 100MB
 
     Args:
-        document_id: Document ID of the PDF to protect
+        documentId: Document ID of the PDF to protect
         user_password: Password required to open the PDF (optional)
         owner_password: Password required to change permissions (optional)
-        allow_printing: Allow printing (default: True)
-        allow_copying: Allow copying content (default: True)
-        allow_editing: Allow editing content (default: True)
+        permissions: Array of permissions to grant (e.g., ["PRINT", "COPY_CONTENT"])
 
     Returns:
         JSON string with success status, taskId, and resultDocumentId
     """
     try:
-        config = {
-            "permissions": {
-                "printing": allow_printing,
-                "copying": allow_copying,
-                "editing": allow_editing,
-            }
+        config: dict[str, object] = {
+            "userPassword": user_password,
+            "ownerPassword": owner_password,
+            "permissions": permissions,
         }
 
-        if user_password:
-            config["userPassword"] = user_password
-        if owner_password:
-            config["ownerPassword"] = owner_password
+        result = await execute_and_wait(client, lambda: client.pdf_protect(documentId, config))
 
-        result = await execute_and_wait(client, lambda: client.pdf_protect(document_id, config))
-
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"PDF protected successfully. Download using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result["taskId"],
+                "resultDocumentId": result.get("resultDocumentId"),
+                "protection": {
+                    "hasUserPassword": bool(user_password),
+                    "hasOwnerPassword": bool(owner_password),
+                    "permissions": permissions or [],
+                },
+                "message": (
+                    "PDF protected successfully. Download using documentId: "
+                    f"{result.get('resultDocumentId')}"
+                ),
+            }
         )
     except Exception as error:
-        return format_error_response(error)
+        return _error_payload(error, "PROTECT_FAILED")
 
 
 @mcp.tool()
-async def pdf_remove_password(document_id: str, password: str) -> str:
+async def pdf_remove_password(documentId: str, password: str) -> str:
     """
     Remove password protection from a PDF document.
 
@@ -89,7 +100,7 @@ async def pdf_remove_password(document_id: str, password: str) -> str:
     Maximum file size: 100MB
 
     Args:
-        document_id: Document ID of the password-protected PDF
+        documentId: Document ID of the password-protected PDF
         password: The user or owner password for the PDF
 
     Returns:
@@ -97,13 +108,19 @@ async def pdf_remove_password(document_id: str, password: str) -> str:
     """
     try:
         result = await execute_and_wait(
-            client, lambda: client.pdf_remove_password(document_id, password)
+            client, lambda: client.pdf_remove_password(documentId, password)
         )
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"Password removed successfully. Download using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result["taskId"],
+                "resultDocumentId": result.get("resultDocumentId"),
+                "message": (
+                    "Password removed successfully. Download using documentId: "
+                    f"{result.get('resultDocumentId')}"
+                ),
+            }
         )
     except Exception as error:
-        return format_error_response(error)
+        return _error_payload(error, "REMOVE_PASSWORD_FAILED")

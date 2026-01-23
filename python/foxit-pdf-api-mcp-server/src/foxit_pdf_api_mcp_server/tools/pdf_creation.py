@@ -1,14 +1,25 @@
 """PDF creation tools: convert various formats to PDF."""
 
+import json
 from typing import Optional
 
 from ..server import client, mcp
 from ..utils import execute_and_wait
-from ._base import format_error_response, format_success_response
+
+
+def _error_payload(error: Exception, default_code: str) -> str:
+    return json.dumps(
+        {
+            "success": False,
+            "error": str(error),
+            "code": getattr(error, "code", default_code),
+            **({"taskId": getattr(error, "task_id")} if hasattr(error, "task_id") else {}),
+        }
+    )
 
 
 @mcp.tool()
-async def pdf_from_word(document_id: str) -> str:
+async def pdf_from_word(documentId: str) -> str:
     """
     Convert a Microsoft Word document to PDF format.
 
@@ -29,25 +40,31 @@ async def pdf_from_word(document_id: str) -> str:
     4. Download result using download_document tool with the returned documentId
 
     Args:
-        document_id: Document ID of the uploaded Word file
+        documentId: Document ID of the uploaded Word file
 
     Returns:
         JSON string with success status, taskId, and resultDocumentId
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_from_word(document_id))
+        result = await execute_and_wait(client, lambda: client.pdf_from_word(documentId))
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"Word document converted to PDF successfully. Download using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result["taskId"],
+                "resultDocumentId": result.get("resultDocumentId"),
+                "message": (
+                    "Word document converted to PDF successfully. Download using documentId: "
+                    f"{result.get('resultDocumentId')}"
+                ),
+            }
         )
     except Exception as error:
-        return format_error_response(error)
+        return _error_payload(error, "CONVERSION_FAILED")
 
 
 @mcp.tool()
-async def pdf_from_excel(document_id: str) -> str:
+async def pdf_from_excel(documentId: str) -> str:
     """
     Convert a Microsoft Excel spreadsheet to PDF format.
 
@@ -62,25 +79,31 @@ async def pdf_from_excel(document_id: str) -> str:
     Maximum file size: 100MB
 
     Args:
-        document_id: Document ID of the uploaded Excel file
+        documentId: Document ID of the uploaded Excel file
 
     Returns:
         JSON string with success status, taskId, and resultDocumentId
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_from_excel(document_id))
+        result = await execute_and_wait(client, lambda: client.pdf_from_excel(documentId))
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"Excel document converted to PDF successfully. Download using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result["taskId"],
+                "resultDocumentId": result.get("resultDocumentId"),
+                "message": (
+                    "Excel document converted to PDF successfully. Download using documentId: "
+                    f"{result.get('resultDocumentId')}"
+                ),
+            }
         )
     except Exception as error:
-        return format_error_response(error)
+        return _error_payload(error, "CONVERSION_FAILED")
 
 
 @mcp.tool()
-async def pdf_from_ppt(document_id: str) -> str:
+async def pdf_from_ppt(documentId: str) -> str:
     """
     Convert a Microsoft PowerPoint presentation to PDF format.
 
@@ -95,25 +118,31 @@ async def pdf_from_ppt(document_id: str) -> str:
     Maximum file size: 100MB
 
     Args:
-        document_id: Document ID of the uploaded PowerPoint file
+        documentId: Document ID of the uploaded PowerPoint file
 
     Returns:
         JSON string with success status, taskId, and resultDocumentId
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_from_ppt(document_id))
+        result = await execute_and_wait(client, lambda: client.pdf_from_ppt(documentId))
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"PowerPoint document converted to PDF successfully. Download using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result["taskId"],
+                "resultDocumentId": result.get("resultDocumentId"),
+                "message": (
+                    "PowerPoint document converted to PDF successfully. Download using documentId: "
+                    f"{result.get('resultDocumentId')}"
+                ),
+            }
         )
     except Exception as error:
-        return format_error_response(error)
+        return _error_payload(error, "CONVERSION_FAILED")
 
 
 @mcp.tool()
-async def pdf_from_text(document_id: str) -> str:
+async def pdf_from_text(documentId: str) -> str:
     """
     Convert a plain text file to PDF format.
 
@@ -128,25 +157,31 @@ async def pdf_from_text(document_id: str) -> str:
     Maximum file size: 100MB
 
     Args:
-        document_id: Document ID of the uploaded text file
+        documentId: Document ID of the uploaded text file
 
     Returns:
         JSON string with success status, taskId, and resultDocumentId
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_from_text(document_id))
+        result = await execute_and_wait(client, lambda: client.pdf_from_text(documentId))
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"Text file converted to PDF successfully. Download using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result["taskId"],
+                "resultDocumentId": result.get("resultDocumentId"),
+                "message": (
+                    "Text file converted to PDF successfully. Download using documentId: "
+                    f"{result.get('resultDocumentId')}"
+                ),
+            }
         )
     except Exception as error:
-        return format_error_response(error)
+        return _error_payload(error, "CONVERSION_FAILED")
 
 
 @mcp.tool()
-async def pdf_from_image(document_id: str) -> str:
+async def pdf_from_image(documentId: str) -> str:
     """
     Convert an image to PDF format.
 
@@ -161,28 +196,33 @@ async def pdf_from_image(document_id: str) -> str:
     Maximum file size: 100MB
 
     Args:
-        document_id: Document ID of the uploaded image file
+        documentId: Document ID of the uploaded image file
 
     Returns:
         JSON string with success status, taskId, and resultDocumentId
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_from_image(document_id))
+        result = await execute_and_wait(client, lambda: client.pdf_from_image(documentId))
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"Image converted to PDF successfully. Download using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result["taskId"],
+                "resultDocumentId": result.get("resultDocumentId"),
+                "message": (
+                    "Image converted to PDF successfully. Download using documentId: "
+                    f"{result.get('resultDocumentId')}"
+                ),
+            }
         )
     except Exception as error:
-        return format_error_response(error)
+        return _error_payload(error, "CONVERSION_FAILED")
 
 
 @mcp.tool()
 async def pdf_from_html(
-    document_id: str,
-    page_width: Optional[int] = None,
-    page_height: Optional[int] = None,
+    documentId: str,
+    config: Optional[dict[str, object]] = None,
 ) -> str:
     """
     Convert an HTML file to PDF format.
@@ -196,40 +236,36 @@ async def pdf_from_html(
     Maximum file size: 100MB
 
     Args:
-        document_id: Document ID of the uploaded HTML file
-        page_width: Page width in points (optional, default: 595 for A4)
-        page_height: Page height in points (optional, default: 842 for A4)
+        documentId: Document ID of the uploaded HTML file
+        config: Optional configuration (dimension/rotation/pageMode/scalingMode)
 
     Returns:
         JSON string with success status, taskId, and resultDocumentId
     """
     try:
-        config = {}
-        if page_width or page_height:
-            config["dimension"] = {}
-            if page_width:
-                config["dimension"]["width"] = str(page_width)
-            if page_height:
-                config["dimension"]["height"] = str(page_height)
-
         result = await execute_and_wait(
-            client, lambda: client.pdf_from_html(document_id, config if config else None)
+            client, lambda: client.pdf_from_html(documentId, config if config else None)
         )
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"HTML converted to PDF successfully. Download using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result["taskId"],
+                "resultDocumentId": result.get("resultDocumentId"),
+                "message": (
+                    "HTML converted to PDF successfully. Download using documentId: "
+                    f"{result.get('resultDocumentId')}"
+                ),
+            }
         )
     except Exception as error:
-        return format_error_response(error)
+        return _error_payload(error, "CONVERSION_FAILED")
 
 
 @mcp.tool()
 async def pdf_from_url(
     url: str,
-    page_width: Optional[int] = None,
-    page_height: Optional[int] = None,
+    config: Optional[dict[str, object]] = None,
 ) -> str:
     """
     Convert a web page from URL to PDF format.
@@ -243,29 +279,26 @@ async def pdf_from_url(
 
     Args:
         url: The URL of the web page to convert (must be publicly accessible)
-        page_width: Page width in points (optional, default: 595 for A4)
-        page_height: Page height in points (optional, default: 842 for A4)
+        config: Optional configuration (dimension/rotation/pageMode/scalingMode)
 
     Returns:
         JSON string with success status, taskId, and resultDocumentId
     """
     try:
-        config = {}
-        if page_width or page_height:
-            config["dimension"] = {}
-            if page_width:
-                config["dimension"]["width"] = str(page_width)
-            if page_height:
-                config["dimension"]["height"] = str(page_height)
-
         result = await execute_and_wait(
             client, lambda: client.pdf_from_url(url, config if config else None)
         )
 
-        return format_success_response(
-            task_id=result.get("taskId", ""),
-            result_document_id=result.get("resultDocumentId"),
-            message=f"URL converted to PDF successfully. Download using documentId: {result.get('resultDocumentId')}",
+        return json.dumps(
+            {
+                "success": True,
+                "taskId": result["taskId"],
+                "resultDocumentId": result.get("resultDocumentId"),
+                "message": (
+                    "URL converted to PDF successfully. Download using documentId: "
+                    f"{result.get('resultDocumentId')}"
+                ),
+            }
         )
     except Exception as error:
-        return format_error_response(error)
+        return _error_payload(error, "CONVERSION_FAILED")

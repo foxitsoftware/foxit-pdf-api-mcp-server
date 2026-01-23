@@ -1,18 +1,30 @@
 """Document lifecycle tools: upload, download, delete."""
 
 import base64
+import json
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from ..server import client, mcp
-from ._base import format_error_response, format_success_response
+
+
+def _error_payload(error: Exception, default_code: str) -> str:
+    return json.dumps(
+        {
+            "success": False,
+            "error": str(error),
+            "code": getattr(error, "code", default_code),
+            **({"taskId": getattr(error, "task_id")} if hasattr(error, "task_id") else {}),
+        }
+    )
 
 
 @mcp.tool()
 async def upload_document(
-    resource_uri: Optional[str] = None,
-    file_content: Optional[str] = None,
-    file_name: Optional[str] = None,
+    resourceUri: Optional[str] = None,
+    fileContent: Optional[str] = None,
+    fileName: Optional[str] = None,
 ) -> str:
     """
     Upload a document for processing with Foxit PDF API.
@@ -46,55 +58,61 @@ async def upload_document(
         file_buffer: bytes
         actual_file_name: str
 
-        # Option 1: Read from MCP resource (recommended)
-        if resource_uri:
+        # Option 1: Read from file:// resource URI
+        if resourceUri:
             try:
-                # For now, assume file:// URI and read directly
-                # In production, would use MCP resource reading
-                if resource_uri.startswith("file://"):
-                    file_path = resource_uri.replace("file://", "")
+                if resourceUri.startswith("file://"):
+                    parsed = urlparse(resourceUri)
+                    # parsed.path is URL-decoded and uses forward slashes
+                    file_path = parsed.path.lstrip("/") if parsed.netloc else parsed.path
                     path = Path(file_path)
                     file_buffer = path.read_bytes()
-                    actual_file_name = file_name or path.name
+                    actual_file_name = fileName or path.name
                 else:
                     raise ValueError(
-                        f"Unsupported resource URI scheme: {resource_uri}. "
+                        f"Unsupported resource URI scheme: {resourceUri}. "
                         "Use file:// or provide file_content"
                     )
             except Exception as e:
                 raise ValueError(
                     f"Failed to read resource: {str(e)}. "
-                    "Try using file_content (base64) instead."
+                    "Try using fileContent (base64) instead."
                 )
 
         # Option 2: Decode base64 content
-        elif file_content:
-            if not file_name:
-                raise ValueError("file_name is required when using file_content")
-            file_buffer = base64.b64decode(file_content)
-            actual_file_name = file_name
+        elif fileContent:
+            if not fileName:
+                raise ValueError("fileName is required when using fileContent")
+            file_buffer = base64.b64decode(fileContent)
+            actual_file_name = fileName
 
         # No valid input provided
         else:
-            raise ValueError("Must provide either resource_uri or file_content")
+            raise ValueError("Must provide either resourceUri or fileContent")
 
         # Upload to API
         response = await client.upload_document(file_buffer, actual_file_name)
 
-        return format_success_response(
-            task_id="",  # Upload doesn't return a task
-            result_document_id=response["documentId"],
-            message=f"Document uploaded successfully. Use documentId '{response['documentId']}' in other operations.",
+        return json.dumps(
+            {
+                "success": True,
+                "documentId": response["documentId"],
+                "fileName": actual_file_name,
+                "message": (
+                    "Document uploaded successfully. "
+                    f"Use documentId '{response['documentId']}' in other operations."
+                ),
+            }
         )
 
     except Exception as error:
-        return format_error_response(error)
+        return _error_payload(error, "UPLOAD_FAILED")
 
 
 @mcp.tool()
 async def download_document(
-    document_id: str,
-    output_path: str,
+    documentId: str,
+    outputPath: str,
     filename: Optional[str] = None,
 ) -> str:
     """
@@ -116,28 +134,29 @@ async def download_document(
     """
     try:
         # Download from API
-        content = await client.download_document(document_id, filename)
+        content = await client.download_document(documentId, filename)
 
         # Write to output path
-        output = Path(output_path)
+        output = Path(outputPath)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(content)
 
-        return format_success_response(
-            task_id="",  # Download doesn't return a task
-            message=f"Document downloaded successfully to: {output_path}",
-            result_data={
+        return json.dumps(
+            {
+                "success": True,
+                "documentId": documentId,
                 "outputPath": str(output),
-                "fileSize": len(content),
-            },
+                "size": len(content),
+                "message": f"Document downloaded successfully to {str(output)}",
+            }
         )
 
     except Exception as error:
-        return format_error_response(error)
+        return _error_payload(error, "DOWNLOAD_FAILED")
 
 
 @mcp.tool()
-async def delete_document(document_id: str) -> str:
+async def delete_document(documentId: str) -> str:
     """
     Delete a document from Foxit PDF API.
 
@@ -151,12 +170,15 @@ async def delete_document(document_id: str) -> str:
         JSON string with success status
     """
     try:
-        await client.delete_document(document_id)
+        await client.delete_document(documentId)
 
-        return format_success_response(
-            task_id="",  # Delete doesn't return a task
-            message=f"Document {document_id} deleted successfully",
+        return json.dumps(
+            {
+                "success": True,
+                "documentId": documentId,
+                "message": f"Document {documentId} deleted successfully",
+            }
         )
 
     except Exception as error:
-        return format_error_response(error)
+        return _error_payload(error, "DELETE_FAILED")
