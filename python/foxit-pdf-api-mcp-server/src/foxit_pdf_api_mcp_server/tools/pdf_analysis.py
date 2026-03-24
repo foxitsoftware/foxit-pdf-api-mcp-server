@@ -3,29 +3,23 @@
 import json
 from typing import Optional
 
-from ..server import client, mcp
+from ..resources import client, mcp
 from ..utils import execute_and_wait
+from ._base import format_error_response
+from .share_link_helper import try_create_share_link
 
 
-def _error_payload(error: Exception, default_code: str) -> str:
-    return json.dumps(
-        {
-            "success": False,
-            "error": str(error),
-            "code": getattr(error, "code", default_code),
-            **({"taskId": getattr(error, "task_id")} if hasattr(error, "task_id") else {}),
-        }
-    )
+WRITE_TOOL_ANNOTATIONS = {"readOnlyHint": False, "destructiveHint": False}
 
 
-@mcp.tool()
+@mcp.tool(annotations=WRITE_TOOL_ANNOTATIONS)
 async def pdf_compare(
-    documentId1: str,
-    documentId2: str,
+    document_id1: str,
+    document_id2: str,
     password1: Optional[str] = None,
     password2: Optional[str] = None,
 ) -> str:
-    """Compare two PDF documents and generate a comparison report.
+    """Compare two PDF documents and generate a visual-diff PDF.
 
     Compares:
     - Text content differences
@@ -45,177 +39,248 @@ async def pdf_compare(
     - Change tracking
 
     Workflow:
-    1. Upload both PDFs using upload_document tool
-    2. Call this tool with both documentIds
-    3. Download comparison report using download_document tool
+    1. Call show_pdf_tools to display the upload widget
+    2. Upload both PDFs using the widget
+    3. Call this tool with both documentIds
+    4. The tool automatically creates a share link and returns it
 
-    Args:
-        document_id1: First PDF document ID
-        document_id2: Second PDF document ID
-        password1: Password for first PDF if protected
-        password2: Password for second PDF if protected
-
-    Returns:
-        JSON string with comparison result and download information
-    """
-    try:
-        result = await execute_and_wait(
-            client, lambda: client.pdf_compare(documentId1, documentId2, password1, password2)
-        )
-
-        return json.dumps(
-            {
-                "success": True,
-                "taskId": result["taskId"],
-                "resultDocumentId": result.get("resultDocumentId"),
-                "message": (
-                    "PDFs compared successfully. Download comparison report using documentId: "
-                    f"{result.get('resultDocumentId')}"
-                ),
-            }
-        )
-    except Exception as error:
-        return _error_payload(error, "COMPARE_FAILED")
-
-
-@mcp.tool()
-async def pdf_ocr(
-    documentId: str,
-    languages: Optional[list[str]] = None,
-    pageRanges: Optional[str] = None,
-    password: Optional[str] = None,
-) -> str:
-    """Perform OCR (Optical Character Recognition) on a PDF document.
-
-    Converts scanned PDFs or image-based PDFs to searchable text PDFs.
-
-    Features:
-    - Multi-language support
-    - Preserves original layout
-    - Makes text searchable and copyable
-    - Enables text extraction
-
-    Configuration:
-    - languages: Array of language codes (e.g., ["en-US", "es-ES", "fr-FR"])
-    - pageRanges: Specific pages to OCR (e.g., "1-5,10-15")
-
-    Supported languages:
-    • CJK Languages: Chinese-Simplified (zh-CN, zh-Hans), Chinese-Traditional (zh-TW, zh-Hant), Japanese (ja-JP), Korean (ko-KR)
-    • European Languages: Basque (eu-ES), Bulgarian (bg-BG), Catalan (ca-ES), Croatian (hr-HR), Czech (cs-CZ), Danish (da-DK), Dutch (nl-NL, nl-BE), English (en-US, en-GB, en-AU, en-CA), Estonian (et-EE), Finnish (fi-FI), French (fr-FR, fr-CA, fr-BE, fr-CH), Galician (gl-ES), German (de-DE, de-AT, de-CH, de-LI, de-LU), Greek (el-GR), Hebrew (he-IL), Hungarian (hu-HU), Icelandic (is-IS), Italian (it-IT, it-CH), Latvian (lv-LV), Lithuanian (lt-LT), Maltese (mt-MT), Norwegian (nb-NO, nn-NO), Polish (pl-PL), Portuguese (pt-PT, pt-BR), Romanian (ro-RO), Russian (ru-RU), Serbian (sr-RS), Slovak (sk-SK), Slovenian (sl-SI), Spanish (es-ES, es-MX, es-AR, es-CL, es-CO, es-PE, es-VE), Swedish (sv-SE), Turkish (tr-TR), Ukrainian (uk-UA)
-    • Other Languages: Thai (th-TH)
-
-    Use cases:
-    - Make scanned documents searchable
-    - Extract text from image-based PDFs
-    - Create accessible versions of scanned content
-    - Convert paper documents to editable format
-
-    Workflow:
-    1. Upload scanned PDF using upload_document tool
-    2. Call this tool with language configuration
-    3. Download searchable PDF using download_document tool
-
-    Args:
-        document_id: Document ID of the PDF to OCR
-        languages: Language codes using standard format (e.g., ["en-US", "es-ES"], default: ["en-US"])
-        page_ranges: Pages to OCR (e.g., "1-5,10", default: all pages)
-        password: Password if PDF is password-protected
+    Required dependencies:
+    - document_id1 and document_id2 must be valid uploaded PDF document identifiers
+    - password1 and password2 are only required when the corresponding PDFs are protected
 
     Returns:
-        JSON string with OCR result and download information
+        JSON string with:
+        - success, message
+        - shareUrl: public download URL for the generated diff PDF, when available
+        - expiresAt: link expiration timestamp, if provided by the API
+        - resultDocumentId: returned only when a share link could not be created and the
+          generated result identifier is needed for follow-up retrieval
+
     """
     try:
+        # Force the API to return a visual diff PDF.
+        # OpenAPI: PDFCompareConfig.resultType = "PDF".
+        config = {"compareType": "ALL", "resultType": "PDF"}
         result = await execute_and_wait(
             client,
-            lambda: client.pdf_ocr(
-                documentId,
-                {"languages": languages, "pageRanges": pageRanges},
-                password,
+            lambda: client.pdf_compare(
+                document_id1, document_id2, password1, password2, config
             ),
         )
 
-        return json.dumps(
-            {
-                "success": True,
-                "taskId": result["taskId"],
-                "resultDocumentId": result.get("resultDocumentId"),
-                "languages": languages or ["en-US"],
-                "message": (
-                    "OCR completed successfully. Download searchable PDF using documentId: "
-                    f"{result.get('resultDocumentId')}"
-                ),
-            }
-        )
+        result_document_id = result.get("resultDocumentId")
+        share, share_error = (None, None)
+        if result_document_id:
+            share, share_error = await try_create_share_link(
+                client.create_share_link,
+                document_id=result_document_id,
+                expiration_minutes=None,
+                filename=None,
+            )
+
+        response = {
+            "success": True,
+            "message": "PDFs compared successfully."
+            if (share or {}).get("shareUrl")
+            else "PDFs compared successfully, but no share link was created.",
+        }
+        if (share or {}).get("shareUrl"):
+            response["shareUrl"] = share.get("shareUrl")
+        if (share or {}).get("expiresAt"):
+            response["expiresAt"] = share.get("expiresAt")
+        if not (share or {}).get("shareUrl") and result_document_id:
+            response["resultDocumentId"] = result_document_id
+
+        return json.dumps(response, indent=2)
     except Exception as error:
-        return _error_payload(error, "OCR_FAILED")
+        return format_error_response(error)
 
 
-@mcp.tool()
-async def pdf_structural_analysis(
-    documentId: str, password: Optional[str] = None
-) -> str:
-    """Perform comprehensive structural analysis on a PDF document.
+# @mcp.tool()
+# async def pdf_ocr(
+#     document_id: str,
+#     languages: Optional[list[str]] = None,
+#     page_ranges: Optional[str] = None,
+#     password: Optional[str] = None,
+# ) -> str:
+#     """Perform OCR (Optical Character Recognition) on a PDF document.
 
-    Extracts detailed document structure including:
-    - Hierarchical organization (titles, headings, paragraphs)
-    - Layout information with bounding boxes
-    - Table structures with cell relationships
-    - Images and visual elements
-    - Forms and interactive fields
-    - Document metadata
-    - Annotations and comments
+#     Converts scanned PDFs or image-based PDFs to searchable text PDFs.
 
-    Output format:
-    - ZIP archive containing:
-      - JSON file with structural analysis (Foxit PDF Extract API v1.0.7 schema)
-      - Extracted images and figures
-      - Table visualizations
+#     Features:
+#     - Multi-language support
+#     - Preserves original layout
+#     - Makes text searchable and copyable
+#     - Enables text extraction
 
-    Detected elements:
-    - title: Document titles and main headings
-    - head: Section headings with hierarchy levels
-    - paragraph: Text content blocks with styling
-    - table: Structured data with cell relationships
-    - image: Graphics, figures, and visual content
-    - form: Interactive form fields
-    - hyperlink: Links and references
-    - formula: Mathematical expressions
+#     Configuration:
+#     - languages: Array of language codes (e.g., ["en-US", "es-ES", "fr-FR"])
+#     - pageRanges: Specific pages to OCR (e.g., "1-5,10-15")
 
-    Use cases:
-    - Document content extraction
-    - Data mining from PDFs
-    - Accessibility improvements
-    - Content migration
-    - Document understanding for AI/ML
+#     Supported languages:
+#     • CJK Languages: Chinese-Simplified (zh-CN, zh-Hans), Chinese-Traditional (zh-TW, zh-Hant), Japanese (ja-JP), Korean (ko-KR)
+#     • European Languages: Basque (eu-ES), Bulgarian (bg-BG), Catalan (ca-ES), Croatian (hr-HR), Czech (cs-CZ), Danish (da-DK), Dutch (nl-NL, nl-BE), English (en-US, en-GB, en-AU, en-CA), Estonian (et-EE), Finnish (fi-FI), French (fr-FR, fr-CA, fr-BE, fr-CH), Galician (gl-ES), German (de-DE, de-AT, de-CH, de-LI, de-LU), Greek (el-GR), Hebrew (he-IL), Hungarian (hu-HU), Icelandic (is-IS), Italian (it-IT, it-CH), Latvian (lv-LV), Lithuanian (lt-LT), Maltese (mt-MT), Norwegian (nb-NO, nn-NO), Polish (pl-PL), Portuguese (pt-PT, pt-BR), Romanian (ro-RO), Russian (ru-RU), Serbian (sr-RS), Slovak (sk-SK), Slovenian (sl-SI), Spanish (es-ES, es-MX, es-AR, es-CL, es-CO, es-PE, es-VE), Swedish (sv-SE), Turkish (tr-TR), Ukrainian (uk-UA)
+#     • Other Languages: Thai (th-TH)
 
-    Workflow:
-    1. Upload PDF using upload_document tool
-    2. Call this tool
-    3. Download ZIP result using download_document tool
-    4. Extract and process the JSON analysis file
+#     Use cases:
+#     - Make scanned documents searchable
+#     - Extract text from image-based PDFs
+#     - Create accessible versions of scanned content
+#     - Convert paper documents to editable format
 
-    Args:
-        document_id: Document ID of the PDF to analyze
-        password: Password if PDF is password-protected
+#     Workflow:
+#     1. Call show_pdf_tools to display the upload widget
+#     2. Upload scanned PDF using the widget
+#     3. Call this tool with language configuration
+#     4. The tool automatically creates a share link and returns it
 
-    Returns:
-        JSON string with analysis result and download information
-    """
-    try:
-        result = await execute_and_wait(
-            client, lambda: client.pdf_structural_analysis(documentId, password)
-        )
+#     Args:
+#         document_id: Document ID of the PDF to OCR
+#         languages: Language codes using standard format (e.g., ["en-US", "es-ES"], default: ["en-US"])
+#         page_ranges: Pages to OCR (e.g., "1-5,10", default: all pages)
+#         password: Password if PDF is password-protected
 
-        return json.dumps(
-            {
-                "success": True,
-                "taskId": result["taskId"],
-                "resultDocumentId": result.get("resultDocumentId"),
-                "message": (
-                    "Structural analysis completed. Download ZIP archive using documentId: "
-                    f"{result.get('resultDocumentId')}"
-                ),
-            }
-        )
-    except Exception as error:
-        return _error_payload(error, "ANALYSIS_FAILED")
+#     Returns:
+#         JSON string with:
+#         - success, taskId, message
+#         - resultDocumentId
+#         - shareUrl, expiresAt (when share link creation succeeds)
+#         - shareLinkError (when share link creation fails)
+#         - resultData.request: { languages, pageRanges, passwordProvided }
+#     """
+#     try:
+#         config = {}
+#         if languages:
+#             config["languages"] = languages
+#         if page_ranges:
+#             config["pageRanges"] = page_ranges
+
+#         result = await execute_and_wait(
+#             client, lambda: client.pdf_ocr(
+#                 document_id, config if config else None, password)
+#         )
+
+#         result_document_id = result.get("resultDocumentId")
+#         share, share_error = (None, None)
+#         if result_document_id:
+#             share, share_error = await try_create_share_link(
+#                 client.create_share_link,
+#                 document_id=result_document_id,
+#                 expiration_minutes=None,
+#                 filename=None,
+#             )
+
+#         return format_success_response(
+#             task_id=result.get("taskId", ""),
+#             result_document_id=result_document_id,
+#             message="OCR completed successfully.",
+#             result_data={
+#                 "request": {
+#                     "languages": languages or ["en-US"],
+#                     "pageRanges": page_ranges,
+#                     **(
+#                         {"passwordProvided": True}
+#                         if password is not None and password != ""
+#                         else {}
+#                     ),
+#                 }
+#             },
+#             share_url=(share or {}).get("shareUrl"),
+#             expires_at=(share or {}).get("expiresAt"),
+#             token=(share or {}).get("token"),
+#             share_link_error=share_error,
+#         )
+#     except Exception as error:
+#         return format_error_response(error)
+
+
+# @mcp.tool()
+# async def pdf_structural_analysis(
+#     document_id: str, password: Optional[str] = None
+# ) -> str:
+#     """Perform comprehensive structural analysis on a PDF document.
+
+#     Extracts detailed document structure including:
+#     - Hierarchical organization (titles, headings, paragraphs)
+#     - Layout information with bounding boxes
+#     - Table structures with cell relationships
+#     - Images and visual elements
+#     - Forms and interactive fields
+#     - Document metadata
+#     - Annotations and comments
+
+#     Output format:
+#     - ZIP archive containing:
+#       - JSON file with structural analysis (Foxit PDF Extract API v1.0.7 schema)
+#       - Extracted images and figures
+#       - Table visualizations
+
+#     Detected elements:
+#     - title: Document titles and main headings
+#     - head: Section headings with hierarchy levels
+#     - paragraph: Text content blocks with styling
+#     - table: Structured data with cell relationships
+#     - image: Graphics, figures, and visual content
+#     - form: Interactive form fields
+#     - hyperlink: Links and references
+#     - formula: Mathematical expressions
+
+#     Use cases:
+#     - Document content extraction
+#     - Data mining from PDFs
+#     - Accessibility improvements
+#     - Content migration
+#     - Document understanding for AI/ML
+
+#     Workflow:
+#     1. Call show_pdf_tools to display the upload widget
+#     2. Upload PDF using the widget
+#     3. Call this tool
+#     4. The tool automatically creates a share link and returns it
+#     5. Extract and process the JSON analysis file
+
+#     Args:
+#         document_id: Document ID of the PDF to analyze
+#         password: Password if PDF is password-protected
+
+#     Returns:
+#         JSON string with:
+#         - success, taskId, message
+#         - resultDocumentId
+#         - shareUrl, expiresAt (when share link creation succeeds)
+#         - shareLinkError (when share link creation fails)
+#     """
+#     try:
+#         result = await execute_and_wait(
+#             client, lambda: client.pdf_structural_analysis(
+#                 document_id, password)
+#         )
+
+#         result_document_id = result.get("resultDocumentId")
+#         share, share_error = (None, None)
+#         if result_document_id:
+#             share, share_error = await try_create_share_link(
+#                 client.create_share_link,
+#                 document_id=result_document_id,
+#                 expiration_minutes=None,
+#                 filename=None,
+#             )
+
+#         return format_success_response(
+#             task_id=result.get("taskId", ""),
+#             result_document_id=result_document_id,
+#             message="Structural analysis completed.",
+#             result_data={
+#                 "request": {
+#                     "passwordProvided": True,
+#                 }
+#             }
+#             if password is not None and password != ""
+#             else None,
+#             share_url=(share or {}).get("shareUrl"),
+#             expires_at=(share or {}).get("expiresAt"),
+#             token=(share or {}).get("token"),
+#             share_link_error=share_error,
+#         )
+#     except Exception as error:
+#         return format_error_response(error)

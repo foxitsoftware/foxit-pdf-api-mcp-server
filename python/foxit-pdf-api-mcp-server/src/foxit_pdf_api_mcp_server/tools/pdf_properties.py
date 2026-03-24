@@ -1,30 +1,25 @@
 """PDF Properties tools for Foxit PDF API MCP Server."""
 
 import json
-from typing import Optional
 
-from ..server import client, mcp
-from ..utils import execute_and_wait
-
-
-def _error_payload(error: Exception, default_code: str) -> str:
-    return json.dumps(
-        {
-            "success": False,
-            "error": str(error),
-            "code": getattr(error, "code", default_code),
-            **({"taskId": getattr(error, "task_id")} if hasattr(error, "task_id") else {}),
-        }
-    )
+from ..resources import client, mcp
+from ._base import format_error_response
 
 
-@mcp.tool()
+READ_ONLY_TOOL_ANNOTATIONS = {"readOnlyHint": True, "destructiveHint": False}
+
+
+@mcp.tool(annotations=READ_ONLY_TOOL_ANNOTATIONS)
 async def get_pdf_properties(
-    documentId: str,
-    includeExtendedInfo: Optional[bool] = None,
-    includePageInfo: Optional[bool] = None,
+    document_id: str,
+    include_extended_info: bool = True,
+    include_page_info: bool = True,
+    password: str | None = None,
 ) -> str:
-    """Extract comprehensive properties and metadata from a PDF document.
+    """⚠️ CRITICAL PREREQUISITE: You MUST call show_pdf_tools first to display the upload widget.
+    The document_id parameter comes from the upload response in the widget.
+
+    Extract comprehensive properties and metadata from a PDF document.
 
     IMPORTANT: This tool returns JSON data directly, not a file documentId.
 
@@ -55,35 +50,35 @@ async def get_pdf_properties(
     3. Receive JSON data with all properties
     4. No download needed - data is returned directly
 
+    Password-protected PDFs:
+    - If the PDF is password-protected, provide the password via the password parameter
+    - Without a valid password, the operation will fail with an authentication error
+
     Args:
         document_id: Document ID of the PDF to analyze
         include_extended_info: Include detailed metadata (fonts, signatures, encryption, etc.). Default: True
         include_page_info: Include per-page information (dimensions, rotation, scan detection). Default: True
+        password: Password for password-protected PDFs. Optional. Provide only if the PDF requires a password.
 
     Returns:
-        JSON string containing PDF properties and metadata
+        JSON string with:
+        - success, message
+        - properties: PDF properties and metadata returned directly as JSON data
     """
     try:
-        result = await execute_and_wait(
-            client,
-            lambda: client.get_pdf_properties(
-                documentId,
-                {
-                    "includeExtendedInfo": True
-                    if includeExtendedInfo is None
-                    else includeExtendedInfo,
-                    "includePageInfo": True if includePageInfo is None else includePageInfo,
-                },
-            ),
+        result = await client.get_pdf_properties(
+            document_id=document_id,
+            include_extended_info=include_extended_info,
+            include_page_info=include_page_info,
+            password=password,
         )
 
-        return json.dumps(
-            {
-                "success": True,
-                "taskId": result["taskId"],
-                "properties": result.get("resultData"),
-                "message": "PDF properties extracted successfully",
-            }
-        )
+        response_data = {
+            "success": True,
+            "message": "PDF properties extracted successfully",
+            "properties": result,
+        }
+
+        return json.dumps(response_data, indent=2)
     except Exception as error:
-        return _error_payload(error, "ANALYSIS_FAILED")
+        return format_error_response(error)

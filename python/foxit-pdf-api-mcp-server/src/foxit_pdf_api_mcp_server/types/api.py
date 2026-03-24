@@ -8,11 +8,13 @@ __all__ = [
     "TaskResponse",
     "DocumentUploadResponse",
     "OperationResponse",
+    "ShareLinkResponse",
     "FoxitPDFClientConfig",
 ]
 
 # Task status types
-TaskStatus = Literal["PENDING", "PROCESSING", "COMPLETED", "FAILED"]
+# OpenAPI uses IN_PROGRESS; some older docs/impls use PROCESSING.
+TaskStatus = Literal["PENDING", "IN_PROGRESS", "PROCESSING", "COMPLETED", "FAILED"]
 
 
 class ErrorInfo(TypedDict, total=False):
@@ -46,6 +48,14 @@ class OperationResponse(TypedDict):
     """Generic operation response."""
 
     taskId: str
+
+
+class ShareLinkResponse(TypedDict):
+    """Create document share link response."""
+
+    shareUrl: str
+    token: str
+    expiresAt: str
 
 
 class FoxitPDFClientConfig(TypedDict, total=False):

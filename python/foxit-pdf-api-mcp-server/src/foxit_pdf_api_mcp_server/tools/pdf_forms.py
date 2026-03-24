@@ -1,28 +1,20 @@
 """PDF Forms tools for Foxit PDF API MCP Server."""
 
-import json
 from typing import Any, Optional
 
-from ..server import client, mcp
+from ..resources import client, mcp
 from ..utils import execute_and_wait
+from ._base import format_error_response, format_success_response
+from .share_link_helper import try_create_share_link
 
 
-def _error_payload(error: Exception, default_code: str) -> str:
-    return json.dumps(
-        {
-            "success": False,
-            "error": str(error),
-            "code": getattr(error, "code", default_code),
-            **({"taskId": getattr(error, "task_id")} if hasattr(error, "task_id") else {}),
-        }
-    )
-
-
-@mcp.tool()
 async def export_pdf_form_data(
-    documentId: str, password: Optional[str] = None
+    document_id: str, password: Optional[str] = None
 ) -> str:
-    """Extract form data from a PDF and return it as JSON.
+    """⚠️ CRITICAL PREREQUISITE: You MUST call show_pdf_tools first to display the upload widget.
+    The document_id parameter comes from the upload response in the widget.
+    
+    Extract form data from a PDF and return it as JSON.
 
     Exports all filled form field values from a PDF form.
 
@@ -56,7 +48,7 @@ async def export_pdf_form_data(
     Workflow:
     1. Upload filled PDF form using upload_document tool
     2. Call this tool
-    3. Download JSON file using download_document tool
+    3. The tool automatically creates a share link and returns it
     4. Parse JSON to access form data
 
     Args:
@@ -64,35 +56,55 @@ async def export_pdf_form_data(
         password: Password if PDF is password-protected
 
     Returns:
-        JSON string with form data export result and download information
+        JSON string with:
+        - success, taskId, message
+        - resultDocumentId
+        - shareUrl, expiresAt (when share link creation succeeds)
+        - shareLinkError (when share link creation fails)
+        - resultData.request: { passwordProvided }
     """
     try:
         result = await execute_and_wait(
-            client, lambda: client.export_pdf_form_data(documentId, password)
+            client, lambda: client.export_pdf_form_data(document_id, password)
         )
 
-        return json.dumps(
-            {
-                "success": True,
-                "taskId": result["taskId"],
-                "resultDocumentId": result.get("resultDocumentId"),
-                "message": (
-                    "Form data exported successfully. Download JSON using documentId: "
-                    f"{result.get('resultDocumentId')}"
-                ),
+        result_document_id = result.get("resultDocumentId")
+        share, share_error = (None, None)
+        if result_document_id:
+            share, share_error = await try_create_share_link(
+                client.create_share_link,
+                document_id=result_document_id,
+                expiration_minutes=None,
+                filename=None,
+            )
+
+        return format_success_response(
+            task_id=result.get("taskId", ""),
+            result_document_id=result_document_id,
+            message="Form data exported successfully.",
+            result_data={
+                "request": {
+                    "passwordProvided": True,
+                }
             }
+            if password is not None and password != ""
+            else None,
+            share_url=(share or {}).get("shareUrl"),
+            expires_at=(share or {}).get("expiresAt"),
+            token=(share or {}).get("token"),
+            share_link_error=share_error,
         )
     except Exception as error:
-        return _error_payload(error, "EXPORT_FORM_FAILED")
+        return format_error_response(error)
 
 
-@mcp.tool()
 async def import_pdf_form_data(
-    documentId: str,
-    formData: dict[str, Any],
-    password: Optional[str] = None,
+    document_id: str, form_data: dict[str, Any], password: Optional[str] = None
 ) -> str:
-    """Populate a PDF form with data provided as JSON.
+    """⚠️ CRITICAL PREREQUISITE: You MUST call show_pdf_tools first to display the upload widget.
+    The document_id parameter comes from the upload response in the widget.
+    
+    Populate a PDF form with data provided as JSON.
 
     Fills PDF form fields with values from a JSON object.
 
@@ -133,7 +145,7 @@ async def import_pdf_form_data(
     1. Upload blank PDF form using upload_document tool
     2. Prepare form data as JSON object
     3. Call this tool with documentId and form data
-    4. Download populated PDF using download_document tool
+    4. The tool automatically creates a share link and returns it
 
     Args:
         document_id: Document ID of the PDF form template
@@ -141,24 +153,46 @@ async def import_pdf_form_data(
         password: Password if PDF is password-protected
 
     Returns:
-        JSON string with form data import result and download information
+        JSON string with:
+        - success, taskId, message
+        - resultDocumentId
+        - shareUrl, expiresAt (when share link creation succeeds)
+        - shareLinkError (when share link creation fails)
+        - resultData.request: { fieldsCount, passwordProvided }
     """
     try:
         result = await execute_and_wait(
-            client, lambda: client.import_pdf_form_data(documentId, formData, password)
+            client, lambda: client.import_pdf_form_data(document_id, form_data, password)
         )
 
-        return json.dumps(
-            {
-                "success": True,
-                "taskId": result["taskId"],
-                "resultDocumentId": result.get("resultDocumentId"),
-                "fieldsCount": len(formData),
-                "message": (
-                    "Form data imported successfully. Download populated PDF using documentId: "
-                    f"{result.get('resultDocumentId')}"
-                ),
-            }
+        result_document_id = result.get("resultDocumentId")
+        share, share_error = (None, None)
+        if result_document_id:
+            share, share_error = await try_create_share_link(
+                client.create_share_link,
+                document_id=result_document_id,
+                expiration_minutes=None,
+                filename=None,
+            )
+
+        return format_success_response(
+            task_id=result.get("taskId", ""),
+            result_document_id=result_document_id,
+            message="Form data imported successfully.",
+            result_data={
+                "request": {
+                    "fieldsCount": len(form_data),
+                    **(
+                        {"passwordProvided": True}
+                        if password is not None and password != ""
+                        else {}
+                    ),
+                },
+            },
+            share_url=(share or {}).get("shareUrl"),
+            expires_at=(share or {}).get("expiresAt"),
+            token=(share or {}).get("token"),
+            share_link_error=share_error,
         )
     except Exception as error:
-        return _error_payload(error, "IMPORT_FORM_FAILED")
+        return format_error_response(error)

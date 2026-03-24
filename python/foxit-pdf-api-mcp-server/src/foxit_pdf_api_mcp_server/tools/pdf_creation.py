@@ -3,24 +3,20 @@
 import json
 from typing import Optional
 
-from ..server import client, mcp
+from ..resources import client, mcp
 from ..utils import execute_and_wait
+from ._base import format_error_response
+from .share_link_helper import try_create_share_link
 
 
-def _error_payload(error: Exception, default_code: str) -> str:
-    return json.dumps(
-        {
-            "success": False,
-            "error": str(error),
-            "code": getattr(error, "code", default_code),
-            **({"taskId": getattr(error, "task_id")} if hasattr(error, "task_id") else {}),
-        }
-    )
+WRITE_TOOL_ANNOTATIONS = {"readOnlyHint": False, "destructiveHint": False}
 
-
-@mcp.tool()
-async def pdf_from_word(documentId: str) -> str:
+@mcp.tool(annotations=WRITE_TOOL_ANNOTATIONS)
+async def pdf_from_word(document_id: str) -> str:
     """
+    ⚠️ CRITICAL PREREQUISITE: You MUST call show_pdf_tools first to display the upload widget.
+    The document_id parameter comes from the upload response in the widget.
+
     Convert a Microsoft Word document to PDF format.
 
     Supported formats: .doc, .docx, .rtf, .dot, .dotx, .docm, .dotm, .wpd
@@ -37,35 +33,55 @@ async def pdf_from_word(documentId: str) -> str:
     1. Upload Word document using upload_document tool
     2. Call this tool with the documentId
     3. Wait for conversion to complete
-    4. Download result using download_document tool with the returned documentId
+    4. The tool automatically creates a share link and returns it
 
     Args:
-        documentId: Document ID of the uploaded Word file
+        document_id: Document ID of the uploaded Word file
 
     Returns:
-        JSON string with success status, taskId, and resultDocumentId
+        JSON string with:
+        - success, message
+                - resultDocumentId: identifier of the converted result document, returned for
+                    follow-up operations on the generated file
+        - shareUrl: public download URL for the converted PDF, when available
+        - expiresAt: link expiration timestamp, if provided by the API
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_from_word(documentId))
+        result = await execute_and_wait(client, lambda: client.pdf_from_word(document_id))
 
-        return json.dumps(
-            {
-                "success": True,
-                "taskId": result["taskId"],
-                "resultDocumentId": result.get("resultDocumentId"),
-                "message": (
-                    "Word document converted to PDF successfully. Download using documentId: "
-                    f"{result.get('resultDocumentId')}"
-                ),
-            }
-        )
+        result_document_id = result.get("resultDocumentId")
+        share = None
+        if result_document_id:
+            share, _ = await try_create_share_link(
+                client.create_share_link,
+                document_id=result_document_id,
+                expiration_minutes=None,
+                filename=None,
+            )
+
+        response = {
+            "success": True,
+            "message": "Word document converted to PDF successfully."
+            if (share or {}).get("shareUrl")
+            else "Word document converted to PDF successfully, but no share link was created.",
+        }
+        if result_document_id:
+            response["resultDocumentId"] = result_document_id
+        if (share or {}).get("shareUrl"):
+            response["shareUrl"] = share.get("shareUrl")
+        if (share or {}).get("expiresAt"):
+            response["expiresAt"] = share.get("expiresAt")
+
+        return json.dumps(response, indent=2)
     except Exception as error:
-        return _error_payload(error, "CONVERSION_FAILED")
+        return format_error_response(error)
 
-
-@mcp.tool()
-async def pdf_from_excel(documentId: str) -> str:
+@mcp.tool(annotations=WRITE_TOOL_ANNOTATIONS)
+async def pdf_from_excel(document_id: str) -> str:
     """
+    ⚠️ CRITICAL PREREQUISITE: You MUST call show_pdf_tools first to display the upload widget.
+    The document_id parameter comes from the upload response in the widget.
+
     Convert a Microsoft Excel spreadsheet to PDF format.
 
     Supported formats: .xls, .xlsx, .xlsm, .xlsb
@@ -79,32 +95,52 @@ async def pdf_from_excel(documentId: str) -> str:
     Maximum file size: 100MB
 
     Args:
-        documentId: Document ID of the uploaded Excel file
+        document_id: Document ID of the uploaded Excel file
 
     Returns:
-        JSON string with success status, taskId, and resultDocumentId
+        JSON string with:
+        - success, message
+                - resultDocumentId: identifier of the converted result document, returned for
+                    follow-up operations on the generated file
+        - shareUrl: public download URL for the converted PDF, when available
+        - expiresAt: link expiration timestamp, if provided by the API
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_from_excel(documentId))
+        result = await execute_and_wait(client, lambda: client.pdf_from_excel(document_id))
 
-        return json.dumps(
-            {
-                "success": True,
-                "taskId": result["taskId"],
-                "resultDocumentId": result.get("resultDocumentId"),
-                "message": (
-                    "Excel document converted to PDF successfully. Download using documentId: "
-                    f"{result.get('resultDocumentId')}"
-                ),
-            }
-        )
+        result_document_id = result.get("resultDocumentId")
+        share = None
+        if result_document_id:
+            share, _ = await try_create_share_link(
+                client.create_share_link,
+                document_id=result_document_id,
+                expiration_minutes=None,
+                filename=None,
+            )
+
+        response = {
+            "success": True,
+            "message": "Excel document converted to PDF successfully."
+            if (share or {}).get("shareUrl")
+            else "Excel document converted to PDF successfully, but no share link was created.",
+        }
+        if result_document_id:
+            response["resultDocumentId"] = result_document_id
+        if (share or {}).get("shareUrl"):
+            response["shareUrl"] = share.get("shareUrl")
+        if (share or {}).get("expiresAt"):
+            response["expiresAt"] = share.get("expiresAt")
+
+        return json.dumps(response, indent=2)
     except Exception as error:
-        return _error_payload(error, "CONVERSION_FAILED")
+        return format_error_response(error)
 
-
-@mcp.tool()
-async def pdf_from_ppt(documentId: str) -> str:
+@mcp.tool(annotations=WRITE_TOOL_ANNOTATIONS)
+async def pdf_from_ppt(document_id: str) -> str:
     """
+    ⚠️ CRITICAL PREREQUISITE: You MUST call show_pdf_tools first to display the upload widget.
+    The document_id parameter comes from the upload response in the widget.
+
     Convert a Microsoft PowerPoint presentation to PDF format.
 
     Supported formats: .ppt, .pptx, .pptm, .ppsx
@@ -118,32 +154,52 @@ async def pdf_from_ppt(documentId: str) -> str:
     Maximum file size: 100MB
 
     Args:
-        documentId: Document ID of the uploaded PowerPoint file
+        document_id: Document ID of the uploaded PowerPoint file
 
     Returns:
-        JSON string with success status, taskId, and resultDocumentId
+        JSON string with:
+        - success, message
+                - resultDocumentId: identifier of the converted result document, returned for
+                    follow-up operations on the generated file
+        - shareUrl: public download URL for the converted PDF, when available
+        - expiresAt: link expiration timestamp, if provided by the API
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_from_ppt(documentId))
+        result = await execute_and_wait(client, lambda: client.pdf_from_ppt(document_id))
 
-        return json.dumps(
-            {
-                "success": True,
-                "taskId": result["taskId"],
-                "resultDocumentId": result.get("resultDocumentId"),
-                "message": (
-                    "PowerPoint document converted to PDF successfully. Download using documentId: "
-                    f"{result.get('resultDocumentId')}"
-                ),
-            }
-        )
+        result_document_id = result.get("resultDocumentId")
+        share = None
+        if result_document_id:
+            share, _ = await try_create_share_link(
+                client.create_share_link,
+                document_id=result_document_id,
+                expiration_minutes=None,
+                filename=None,
+            )
+
+        response = {
+            "success": True,
+            "message": "PowerPoint document converted to PDF successfully."
+            if (share or {}).get("shareUrl")
+            else "PowerPoint document converted to PDF successfully, but no share link was created.",
+        }
+        if result_document_id:
+            response["resultDocumentId"] = result_document_id
+        if (share or {}).get("shareUrl"):
+            response["shareUrl"] = share.get("shareUrl")
+        if (share or {}).get("expiresAt"):
+            response["expiresAt"] = share.get("expiresAt")
+
+        return json.dumps(response, indent=2)
     except Exception as error:
-        return _error_payload(error, "CONVERSION_FAILED")
+        return format_error_response(error)
 
-
-@mcp.tool()
-async def pdf_from_text(documentId: str) -> str:
+@mcp.tool(annotations=WRITE_TOOL_ANNOTATIONS)
+async def pdf_from_text(document_id: str) -> str:
     """
+    ⚠️ CRITICAL PREREQUISITE: You MUST call show_pdf_tools first to display the upload widget.
+    The document_id parameter comes from the upload response in the widget.
+
     Convert a plain text file to PDF format.
 
     Supported formats: .txt
@@ -157,32 +213,52 @@ async def pdf_from_text(documentId: str) -> str:
     Maximum file size: 100MB
 
     Args:
-        documentId: Document ID of the uploaded text file
+        document_id: Document ID of the uploaded text file
 
     Returns:
-        JSON string with success status, taskId, and resultDocumentId
+        JSON string with:
+        - success, message
+                - resultDocumentId: identifier of the converted result document, returned for
+                    follow-up operations on the generated file
+        - shareUrl: public download URL for the converted PDF, when available
+        - expiresAt: link expiration timestamp, if provided by the API
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_from_text(documentId))
+        result = await execute_and_wait(client, lambda: client.pdf_from_text(document_id))
 
-        return json.dumps(
-            {
-                "success": True,
-                "taskId": result["taskId"],
-                "resultDocumentId": result.get("resultDocumentId"),
-                "message": (
-                    "Text file converted to PDF successfully. Download using documentId: "
-                    f"{result.get('resultDocumentId')}"
-                ),
-            }
-        )
+        result_document_id = result.get("resultDocumentId")
+        share = None
+        if result_document_id:
+            share, _ = await try_create_share_link(
+                client.create_share_link,
+                document_id=result_document_id,
+                expiration_minutes=None,
+                filename=None,
+            )
+
+        response = {
+            "success": True,
+            "message": "Text file converted to PDF successfully."
+            if (share or {}).get("shareUrl")
+            else "Text file converted to PDF successfully, but no share link was created.",
+        }
+        if result_document_id:
+            response["resultDocumentId"] = result_document_id
+        if (share or {}).get("shareUrl"):
+            response["shareUrl"] = share.get("shareUrl")
+        if (share or {}).get("expiresAt"):
+            response["expiresAt"] = share.get("expiresAt")
+
+        return json.dumps(response, indent=2)
     except Exception as error:
-        return _error_payload(error, "CONVERSION_FAILED")
+        return format_error_response(error)
 
-
-@mcp.tool()
-async def pdf_from_image(documentId: str) -> str:
+@mcp.tool(annotations=WRITE_TOOL_ANNOTATIONS)
+async def pdf_from_image(document_id: str) -> str:
     """
+    ⚠️ CRITICAL PREREQUISITE: You MUST call show_pdf_tools first to display the upload widget.
+    The document_id parameter comes from the upload response in the widget.
+
     Convert an image to PDF format.
 
     Supported formats: .jpg, .jpeg, .png, .gif, .bmp, .tiff
@@ -196,36 +272,64 @@ async def pdf_from_image(documentId: str) -> str:
     Maximum file size: 100MB
 
     Args:
-        documentId: Document ID of the uploaded image file
+        document_id: Document ID of the uploaded image file
 
     Returns:
-        JSON string with success status, taskId, and resultDocumentId
+        JSON string with:
+        - success, message
+                - resultDocumentId: identifier of the converted result document, returned for
+                    follow-up operations on the generated file
+        - shareUrl: public download URL for the converted PDF, when available
+        - expiresAt: link expiration timestamp, if provided by the API
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_from_image(documentId))
+        result = await execute_and_wait(client, lambda: client.pdf_from_image(document_id))
 
-        return json.dumps(
-            {
-                "success": True,
-                "taskId": result["taskId"],
-                "resultDocumentId": result.get("resultDocumentId"),
-                "message": (
-                    "Image converted to PDF successfully. Download using documentId: "
-                    f"{result.get('resultDocumentId')}"
-                ),
-            }
-        )
+        result_document_id = result.get("resultDocumentId")
+        share = None
+        if result_document_id:
+            share, _ = await try_create_share_link(
+                client.create_share_link,
+                document_id=result_document_id,
+                expiration_minutes=None,
+                filename=None,
+            )
+
+        response = {
+            "success": True,
+            "message": "Image converted to PDF successfully."
+            if (share or {}).get("shareUrl")
+            else "Image converted to PDF successfully, but no share link was created.",
+        }
+        if result_document_id:
+            response["resultDocumentId"] = result_document_id
+        if (share or {}).get("shareUrl"):
+            response["shareUrl"] = share.get("shareUrl")
+        if (share or {}).get("expiresAt"):
+            response["expiresAt"] = share.get("expiresAt")
+
+        return json.dumps(response, indent=2)
     except Exception as error:
-        return _error_payload(error, "CONVERSION_FAILED")
+        return format_error_response(error)
 
-
-@mcp.tool()
+@mcp.tool(annotations=WRITE_TOOL_ANNOTATIONS)
 async def pdf_from_html(
-    documentId: str,
-    config: Optional[dict[str, object]] = None,
+    document_id: str,
+    page_width: Optional[int] = None,
+    page_height: Optional[int] = None,
 ) -> str:
     """
+    ⚠️ CRITICAL PREREQUISITE: You MUST call show_pdf_tools first to display the upload widget.
+    The document_id parameter comes from the upload response in the widget.
+
     Convert an HTML file to PDF format.
+
+        When to use this vs `pdf_from_url` (LLM: choose the right tool):
+        - Use `pdf_from_html` when you already have the page content as an HTML file
+            (e.g., “Save page as…”), or when the page is private/behind login/VPN/intranet
+            and cannot be fetched directly by the Foxit service.
+        - Use `pdf_from_url` when the target page is publicly accessible and you want
+            Foxit to fetch + render it directly from the URL (no upload).
 
     Features:
     - Renders HTML with CSS styling
@@ -236,69 +340,143 @@ async def pdf_from_html(
     Maximum file size: 100MB
 
     Args:
-        documentId: Document ID of the uploaded HTML file
-        config: Optional configuration (dimension/rotation/pageMode/scalingMode)
+        document_id: Document ID of the uploaded HTML file
+        page_width: Page width in points (optional, default: 595 for A4)
+        page_height: Page height in points (optional, default: 842 for A4)
 
     Returns:
-        JSON string with success status, taskId, and resultDocumentId
+        JSON string with:
+                - success, message
+                - resultDocumentId: identifier of the converted result document, returned for
+                    follow-up operations on the generated file
+                - shareUrl: public download URL for the converted PDF, when available
+                - expiresAt: link expiration timestamp, if provided by the API
     """
     try:
+        config = {}
+        if page_width or page_height:
+            config["dimension"] = {}
+            if page_width:
+                config["dimension"]["width"] = str(page_width)
+            if page_height:
+                config["dimension"]["height"] = str(page_height)
+
         result = await execute_and_wait(
-            client, lambda: client.pdf_from_html(documentId, config if config else None)
+            client, lambda: client.pdf_from_html(
+                document_id, config if config else None)
         )
 
-        return json.dumps(
-            {
-                "success": True,
-                "taskId": result["taskId"],
-                "resultDocumentId": result.get("resultDocumentId"),
-                "message": (
-                    "HTML converted to PDF successfully. Download using documentId: "
-                    f"{result.get('resultDocumentId')}"
-                ),
-            }
-        )
+        result_document_id = result.get("resultDocumentId")
+        share = None
+        if result_document_id:
+            share, _ = await try_create_share_link(
+                client.create_share_link,
+                document_id=result_document_id,
+                expiration_minutes=None,
+                filename=None,
+            )
+
+        response = {
+            "success": True,
+            "message": "HTML converted to PDF successfully."
+            if (share or {}).get("shareUrl")
+            else "HTML converted to PDF successfully, but no share link was created.",
+        }
+        if result_document_id:
+            response["resultDocumentId"] = result_document_id
+        if (share or {}).get("shareUrl"):
+            response["shareUrl"] = share.get("shareUrl")
+        if (share or {}).get("expiresAt"):
+            response["expiresAt"] = share.get("expiresAt")
+
+        return json.dumps(response, indent=2)
     except Exception as error:
-        return _error_payload(error, "CONVERSION_FAILED")
+        return format_error_response(error)
 
-
-@mcp.tool()
+@mcp.tool(annotations=WRITE_TOOL_ANNOTATIONS)
 async def pdf_from_url(
     url: str,
-    config: Optional[dict[str, object]] = None,
+    page_width: Optional[int] = None,
+    page_height: Optional[int] = None,
 ) -> str:
     """
-    Convert a web page from URL to PDF format.
+        Convert a live web page (URL) directly to a PDF.
 
-    Features:
-    - Renders live web pages
-    - Includes CSS styling and images
-    - Preserves hyperlinks
-    - Automatic page breaks
-    - JavaScript execution (limited)
+        ✅ No upload needed: This tool takes a URL and asks the Foxit Cloud PDF API
+        to render that page server-side.
 
-    Args:
-        url: The URL of the web page to convert (must be publicly accessible)
-        config: Optional configuration (dimension/rotation/pageMode/scalingMode)
+        Important limitations (LLM: read before choosing this tool):
+        - The URL must be publicly reachable by the Foxit service.
+        - Pages requiring login, cookies, VPN/intranet access, or complex anti-bot
+            protections may fail or render incomplete.
+        - JavaScript is supported but with time/feature limits (dynamic sites may differ
+            from what you see in your browser).
 
-    Returns:
-        JSON string with success status, taskId, and resultDocumentId
+        If the target page is NOT publicly accessible, use one of these instead:
+        - Save the page as HTML/PDF locally, upload it, then call `pdf_from_html` (HTML)
+            or just keep the uploaded PDF.
+
+        Features:
+        - Renders live web pages into PDF
+        - Includes CSS styling and images
+        - Preserves hyperlinks
+        - Automatic page breaks
+
+        Workflow:
+        1. Call this tool with `url` (and optional page size)
+        2. Wait for async task completion (handled internally)
+        3. Returns `resultDocumentId` plus a share link (when share creation succeeds)
+
+        Args:
+                url: Publicly accessible URL of the web page to convert
+                page_width: Page width in points (optional; default A4 width is 595)
+                page_height: Page height in points (optional; default A4 height is 842)
+
+        Returns:
+            JSON string with:
+            - success, message
+            - resultDocumentId: identifier of the converted result document, returned for
+              follow-up operations on the generated file
+            - shareUrl: public download URL for the converted PDF, when available
+            - expiresAt: link expiration timestamp, if provided by the API
     """
     try:
+        config = {}
+        if page_width or page_height:
+            config["dimension"] = {}
+            if page_width:
+                config["dimension"]["width"] = str(page_width)
+            if page_height:
+                config["dimension"]["height"] = str(page_height)
+
         result = await execute_and_wait(
-            client, lambda: client.pdf_from_url(url, config if config else None)
+            client, lambda: client.pdf_from_url(
+                url, config if config else None)
         )
 
-        return json.dumps(
-            {
-                "success": True,
-                "taskId": result["taskId"],
-                "resultDocumentId": result.get("resultDocumentId"),
-                "message": (
-                    "URL converted to PDF successfully. Download using documentId: "
-                    f"{result.get('resultDocumentId')}"
-                ),
-            }
-        )
+        result_document_id = result.get("resultDocumentId")
+        share = None
+        if result_document_id:
+            share, _ = await try_create_share_link(
+                client.create_share_link,
+                document_id=result_document_id,
+                expiration_minutes=None,
+                filename=None,
+            )
+
+        response = {
+            "success": True,
+            "message": "URL converted to PDF successfully."
+            if (share or {}).get("shareUrl")
+            else "URL converted to PDF successfully, but no share link was created.",
+        }
+        if result_document_id:
+            response["resultDocumentId"] = result_document_id
+        if (share or {}).get("shareUrl"):
+            response["shareUrl"] = share.get("shareUrl")
+        if (share or {}).get("expiresAt"):
+            response["expiresAt"] = share.get("expiresAt")
+
+        return json.dumps(response, indent=2)
     except Exception as error:
-        return _error_payload(error, "CONVERSION_FAILED")
+        return format_error_response(error)

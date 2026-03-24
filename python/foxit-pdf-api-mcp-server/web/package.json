@@ -1,0 +1,32 @@
+{
+    "name": "foxit-pdf-upload-widget",
+    "version": "1.0.0",
+    "description": "Foxit PDF文件上传小组件",
+    "type": "module",
+    "license": "MIT",
+    "scripts": {
+        "dev": "vite",
+        "build": "npm run build:upload && npm run build:viewer",
+        "build:upload": "vue-tsc && cross-env VITE_ENTRY=index.html vite build --outDir dist",
+        "build:viewer": "cross-env VITE_ENTRY=viewer.html vite build --outDir dist --emptyOutDir=false",
+        "preview": "vite preview",
+        "serve": "serve -s ./dist -p 4444 --cors"
+    },
+    "dependencies": {
+        "@arco-design/web-vue": "^2.56.2",
+        "vue": "^3.5.13"
+    },
+    "devDependencies": {
+        "@vitejs/plugin-vue": "^5.2.1",
+        "cross-env": "^7.0.3",
+        "serve": "^14.2.4",
+        "typescript": "^5.7.2",
+        "vite": "^6.0.5",
+        "vite-plugin-singlefile": "^2.3.0",
+        "vite-svg-loader": "^5.1.0",
+        "vue-tsc": "^2.1.10"
+    },
+    "optionalDependencies": {
+        "@rollup/rollup-win32-x64-msvc": "^4.54.0"
+    }
+}
