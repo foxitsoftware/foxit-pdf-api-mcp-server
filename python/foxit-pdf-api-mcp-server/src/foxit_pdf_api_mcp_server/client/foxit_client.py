@@ -1,8 +1,12 @@
 from typing import Any, Optional
 
+from urllib.parse import urlparse
+
+import asyncio
+
 import httpx
 
-from ..types.api import DocumentUploadResponse, OperationResponse, TaskResponse
+from ..types.api import DocumentUploadResponse, OperationResponse, ShareLinkResponse, TaskResponse
 
 
 class FoxitAPIError(Exception):
@@ -46,6 +50,8 @@ class FoxitPDFClient:
         default_timeout: int = 300,
         poll_interval: int = 2,
         max_retries: int = 3,
+        debug_http: bool = False,
+        min_same_document_download_interval_seconds: float = 2.1,
     ) -> None:
         """
         Initialize Foxit PDF API client.
@@ -64,6 +70,14 @@ class FoxitPDFClient:
         self.default_timeout = default_timeout
         self.poll_interval = poll_interval
         self.max_retries = max_retries
+        self.debug_http = debug_http
+        # Gateway rate limiting is strict for repeated downloads of the same document.
+        # Enforce a minimum spacing between same-document download attempts.
+        self.min_same_document_download_interval_seconds = (
+            min_same_document_download_interval_seconds
+        )
+        self._download_locks: dict[str, asyncio.Lock] = {}
+        self._last_download_attempt_at: dict[str, float] = {}
 
         # Create async HTTP client
         self._client = httpx.AsyncClient(
@@ -74,6 +88,50 @@ class FoxitPDFClient:
         """Close the HTTP client."""
         await self._client.aclose()
 
+    def _get_download_lock(self, document_id: str) -> asyncio.Lock:
+        lock = self._download_locks.get(document_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._download_locks[document_id] = lock
+        return lock
+
+    async def _wait_before_same_document_download(self, document_id: str) -> None:
+        """Ensure same-document downloads are at least N seconds apart."""
+        min_interval = self.min_same_document_download_interval_seconds
+        if min_interval <= 0:
+            return
+
+        lock = self._get_download_lock(document_id)
+        async with lock:
+            now = asyncio.get_event_loop().time()
+            last = self._last_download_attempt_at.get(document_id)
+            if last is not None:
+                elapsed = now - last
+                wait_seconds = min_interval - elapsed
+                if wait_seconds > 0:
+                    if self.debug_http:
+                        print(
+                            f"[foxit:http] delaying same-document download documentId={document_id} wait={wait_seconds:.2f}s"
+                        )
+                    await asyncio.sleep(wait_seconds)
+            self._last_download_attempt_at[document_id] = asyncio.get_event_loop().time()
+
+    @staticmethod
+    def _is_rate_limited_response(status_code: int, body_text: str) -> bool:
+        if status_code == 429:
+            return True
+        if status_code not in {502, 503, 504}:
+            return False
+
+        body = (body_text or "").lower()
+        return (
+            "ratelimiterexception" in body
+            or "blocked by gateway" in body
+            or "too many requests" in body
+            or '"code":429' in body
+            or " code 429" in body
+        )
+
     def _get_auth_headers(self) -> dict[str, str]:
         """
         Get authentication headers.
@@ -81,10 +139,15 @@ class FoxitPDFClient:
         Returns:
             Dictionary with authentication headers
         """
-        return {
+        # OpenAPI (api-docs_v1.8.json) specifies apiKey auth header: x-api-key.
+        # Keep legacy headers for compatibility with environments that still expect them.
+        headers: dict[str, str] = {
             "client_id": self.client_id,
             "client_secret": self.client_secret,
         }
+        if self.client_secret:
+            headers.setdefault("x-api-key", self.client_secret)
+        return headers
 
     async def _make_request(
         self,
@@ -114,18 +177,54 @@ class FoxitPDFClient:
         if headers:
             request_headers.update(headers)
 
+        if self.debug_http:
+            parsed = urlparse(url)
+            safe_headers = dict(request_headers)
+            if "client_secret" in safe_headers:
+                safe_headers["client_secret"] = "***"
+            if "x-api-key" in safe_headers:
+                safe_headers["x-api-key"] = "***"
+            print(
+                f"[foxit:http] request method={method} url={url} host={parsed.hostname}"
+            )
+            print(f"[foxit:http] request headers={safe_headers}")
+
         try:
             response = await self._client.request(
                 method=method, url=url, headers=request_headers, **kwargs
             )
+
+            if self.debug_http:
+                final_url = str(response.url)
+                if response.history:
+                    history_urls = " -> ".join(str(r.url) for r in response.history)
+                    print(f"[foxit:http] response redirects={history_urls} -> {final_url}")
+                else:
+                    print(f"[foxit:http] response url={final_url}")
+                print(f"[foxit:http] response status={response.status_code}")
+
+                if response.status_code >= 400:
+                    # Print a small, safe preview of the error body to help diagnose auth/config issues.
+                    try:
+                        body_preview = response.text
+                    except Exception:
+                        body_preview = ""
+                    body_preview = (body_preview or "").strip()
+                    if len(body_preview) > 1500:
+                        body_preview = body_preview[:1500] + "..."
+                    if body_preview:
+                        print(f"[foxit:http] response body (preview)={body_preview}")
+
             return response
         except httpx.TimeoutException as e:
+            detail = str(e).strip() or repr(e)
             raise FoxitAPIError(
-                message=f"Request timeout: {str(e)}", code="TIMEOUT"
+                message=f"Request timeout: {detail}", code="TIMEOUT"
             ) from e
         except httpx.RequestError as e:
+            detail = str(e).strip() or repr(e)
             raise FoxitAPIError(
-                message=f"Request failed: {str(e)}", code="REQUEST_FAILED"
+                message=f"Request failed: {detail}", code="REQUEST_FAILED"
             ) from e
 
     async def _handle_response(self, response: httpx.Response) -> dict[str, Any]:
@@ -144,25 +243,25 @@ class FoxitPDFClient:
         if response.status_code >= 400:
             try:
                 error_data = response.json()
-
-                # Foxit error payloads can vary by environment/gateway.
-                # Prefer specific fields when present; otherwise include the JSON body.
-                message = (
-                    error_data.get("message")
-                    or error_data.get("error")
-                    or error_data.get("detail")
-                    or error_data.get("title")
-                    or f"HTTP {response.status_code}: {error_data}"
-                )
-                code = (
-                    error_data.get("code")
-                    or error_data.get("errorCode")
-                    or error_data.get("error_code")
-                    or "API_ERROR"
-                )
+                if isinstance(error_data, dict):
+                    msg = (
+                        error_data.get("message")
+                        or error_data.get("error")
+                        or error_data.get("detail")
+                        or error_data.get("msg")
+                    )
+                    if not msg:
+                        msg = f"HTTP {response.status_code}"
+                    code = error_data.get("code") or error_data.get("errorCode") or "API_ERROR"
+                    raise FoxitAPIError(
+                        message=str(msg),
+                        code=str(code),
+                        status_code=response.status_code,
+                        details=error_data,
+                    )
                 raise FoxitAPIError(
-                    message=str(message),
-                    code=str(code),
+                    message=error_data.get("message", "API request failed"),
+                    code=error_data.get("code", "API_ERROR"),
                     status_code=response.status_code,
                     details=error_data,
                 )
@@ -181,6 +280,48 @@ class FoxitPDFClient:
             ) from e
 
     # Document operations
+
+    async def create_share_link(
+        self,
+        document_id: str,
+        expiration_minutes: Optional[int] = None,
+        filename: Optional[str] = None,
+    ) -> ShareLinkResponse:
+        """
+        Create a time-limited, publicly accessible share link for a document.
+
+        Args:
+            document_id: Document ID to share
+            expiration_minutes: Optional expiration time in minutes (10-1440)
+            filename: Optional custom filename for download
+
+        Returns:
+            Share link response with shareUrl, token, and expiresAt
+        """
+        payload: dict[str, Any] = {}
+        if expiration_minutes is not None:
+            payload["expirationMinutes"] = expiration_minutes
+        if filename is not None:
+            payload["filename"] = filename
+
+        # OpenAPI defines an optional/empty requestBody; avoid sending JSON null.
+        if payload:
+            response = await self._make_request(
+                "POST",
+                f"/api/documents/{document_id}/share",
+                json=payload,
+            )
+        else:
+            response = await self._make_request(
+                "POST",
+                f"/api/documents/{document_id}/share",
+            )
+        data = await self._handle_response(response)
+        return ShareLinkResponse(
+            shareUrl=data["shareUrl"],
+            token=data["token"],
+            expiresAt=data["expiresAt"],
+        )
 
     async def upload_document(
         self, file_content: bytes, file_name: str
@@ -221,12 +362,121 @@ class FoxitPDFClient:
         if filename:
             path += f"?filename={filename}"
 
-        response = await self._make_request("GET", path)
+        retry_delay = 2
+        last_response: Optional[httpx.Response] = None
+        for attempt in range(self.max_retries + 1):
+            await self._wait_before_same_document_download(document_id)
+            response = await self._make_request("GET", path)
+            last_response = response
 
-        if response.status_code >= 400:
-            await self._handle_response(response)
+            body_preview = ""
+            if response.status_code >= 400:
+                try:
+                    body_preview = response.text
+                except Exception:
+                    body_preview = ""
 
-        return response.content
+            if self._is_rate_limited_response(response.status_code, body_preview):
+                if attempt < self.max_retries:
+                    wait = int(response.headers.get("Retry-After", retry_delay))
+                    if self.debug_http:
+                        print(
+                            f"[foxit:http] download rate-limited, retrying in {wait}s (attempt {attempt + 1}/{self.max_retries})"
+                        )
+                    await asyncio.sleep(wait)
+                    continue
+
+            if response.status_code >= 400:
+                await self._handle_response(response)
+
+            return response.content
+
+        if last_response is not None and last_response.status_code >= 400:
+            await self._handle_response(last_response)
+        return b""
+
+    async def download_document_partial(
+        self,
+        document_id: str,
+        *,
+        max_bytes: int,
+        filename: Optional[str] = None,
+    ) -> tuple[bytes, bool]:
+        """Download up to max_bytes of a document (streaming).
+
+        This is useful for very large documents when callers only need a preview.
+
+        Returns:
+            (content, truncated)
+        """
+        if max_bytes <= 0:
+            return b"", False
+
+        path = f"/api/documents/{document_id}/download"
+        if filename:
+            path += f"?filename={filename}"
+
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        headers = self._get_auth_headers()
+
+        collected = bytearray()
+        truncated = False
+
+        retry_delay = 2  # seconds to wait before retrying on 429
+        for attempt in range(self.max_retries + 1):
+            collected.clear()
+            truncated = False
+            await self._wait_before_same_document_download(document_id)
+
+            async with self._client.stream("GET", url, headers=headers) as response:
+                should_retry_rate_limit = False
+                if response.status_code >= 400:
+                    body = await response.aread()
+                    body_text = ""
+                    try:
+                        body_text = body.decode("utf-8", errors="replace")
+                    except Exception:
+                        body_text = ""
+
+                    if self._is_rate_limited_response(response.status_code, body_text):
+                        should_retry_rate_limit = True
+
+                    if should_retry_rate_limit and attempt < self.max_retries:
+                        wait = int(response.headers.get("Retry-After", retry_delay))
+                        if self.debug_http:
+                            print(
+                                f"[foxit:http] rate-limited on streaming download, retrying in {wait}s (attempt {attempt + 1}/{self.max_retries})"
+                            )
+                        await asyncio.sleep(wait)
+                        continue
+
+                    # Materialize body so we can reuse existing error parsing.
+                    error_response = httpx.Response(
+                        status_code=response.status_code,
+                        headers=response.headers,
+                        content=body,
+                        request=response.request,
+                    )
+                    await self._handle_response(error_response)
+
+                async for chunk in response.aiter_bytes():
+                    if not chunk:
+                        continue
+                    remaining = max_bytes - len(collected)
+                    if remaining <= 0:
+                        truncated = True
+                        break
+                    if len(chunk) <= remaining:
+                        collected.extend(chunk)
+                    else:
+                        collected.extend(chunk[:remaining])
+                        truncated = True
+                        break
+
+            return bytes(collected), truncated
+
+        # All retries exhausted — last attempt already raised or returned above.
+        return bytes(collected), truncated
 
     async def delete_document(self, document_id: str) -> None:
         """
@@ -239,7 +489,7 @@ class FoxitPDFClient:
         if response.status_code >= 400:
             await self._handle_response(response)
 
-    async def get_task_status(self, task_id: str) -> TaskResponse:
+    async def get_task_status(self, task_id: str, region: Optional[str] = None) -> TaskResponse:
         """
         Get task status.
 
@@ -249,7 +499,15 @@ class FoxitPDFClient:
         Returns:
             Task status response
         """
-        response = await self._make_request("GET", f"/api/tasks/{task_id}")
+        params: dict[str, Any] = {}
+        if region is not None and region != "":
+            params["region"] = region
+
+        response = await self._make_request(
+            "GET",
+            f"/api/tasks/{task_id}",
+            params=(params or None),
+        )
         data = await self._handle_response(response)
         return TaskResponse(**data)
 
@@ -297,10 +555,12 @@ class FoxitPDFClient:
         self, document_id: str, config: Optional[dict[str, Any]] = None
     ) -> OperationResponse:
         """Convert HTML to PDF."""
+        payload: dict[str, Any] = {"documentId": document_id}
+        if config:
+            payload.update(config)
+
         response = await self._make_request(
-            "POST",
-            "/api/documents/create/pdf-from-html",
-            json={"documentId": document_id, "config": config},
+            "POST", "/api/documents/create/pdf-from-html", json=payload
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
@@ -309,10 +569,12 @@ class FoxitPDFClient:
         self, url: str, config: Optional[dict[str, Any]] = None
     ) -> OperationResponse:
         """Convert URL to PDF."""
+        payload: dict[str, Any] = {"url": url}
+        if config:
+            payload.update(config)
+
         response = await self._make_request(
-            "POST",
-            "/api/documents/create/pdf-from-url",
-            json={"url": url, "config": config},
+            "POST", "/api/documents/create/pdf-from-url", json=payload
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
@@ -341,65 +603,87 @@ class FoxitPDFClient:
 
     async def pdf_to_word(self, document_id: str, password: Optional[str] = None) -> OperationResponse:
         """Convert PDF to Word."""
+        payload: dict[str, Any] = {"documentId": document_id}
+        if password is not None and password != "":
+            payload["password"] = password
         response = await self._make_request(
             "POST",
             "/api/documents/convert/pdf-to-word",
-            json={"documentId": document_id, "password": password},
+            json=payload,
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
 
     async def pdf_to_excel(self, document_id: str, password: Optional[str] = None) -> OperationResponse:
         """Convert PDF to Excel."""
+        payload: dict[str, Any] = {"documentId": document_id}
+        if password is not None and password != "":
+            payload["password"] = password
         response = await self._make_request(
             "POST",
             "/api/documents/convert/pdf-to-excel",
-            json={"documentId": document_id, "password": password},
+            json=payload,
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
 
     async def pdf_to_ppt(self, document_id: str, password: Optional[str] = None) -> OperationResponse:
         """Convert PDF to PowerPoint."""
+        payload: dict[str, Any] = {"documentId": document_id}
+        if password is not None and password != "":
+            payload["password"] = password
         response = await self._make_request(
             "POST",
             "/api/documents/convert/pdf-to-ppt",
-            json={"documentId": document_id, "password": password},
+            json=payload,
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
 
-    async def pdf_to_html(self, document_id: str, password: Optional[str] = None) -> OperationResponse:
+    async def pdf_to_html(
+        self, document_id: str, config: Optional[dict[str, Any]] = None, password: Optional[str] = None
+    ) -> OperationResponse:
         """Convert PDF to HTML."""
+        payload: dict[str, Any] = {"documentId": document_id}
+        if password is not None and password != "":
+            payload["password"] = password
+        if config:
+            payload.update(config)
+
         response = await self._make_request(
-            "POST",
-            "/api/documents/convert/pdf-to-html",
-            json={"documentId": document_id, "password": password},
+            "POST", "/api/documents/convert/pdf-to-html", json=payload
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
 
-    async def pdf_to_text(self, document_id: str, password: Optional[str] = None) -> OperationResponse:
+    async def pdf_to_text(
+        self, document_id: str, config: Optional[dict[str, Any]] = None, password: Optional[str] = None
+    ) -> OperationResponse:
         """Convert PDF to text."""
+        payload: dict[str, Any] = {"documentId": document_id}
+        if password is not None and password != "":
+            payload["password"] = password
+        if config:
+            payload.update(config)
+
         response = await self._make_request(
-            "POST",
-            "/api/documents/convert/pdf-to-text",
-            json={"documentId": document_id, "password": password},
+            "POST", "/api/documents/convert/pdf-to-text", json=payload
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
 
     async def pdf_to_image(
-        self,
-        document_id: str,
-        config: Optional[dict[str, Any]] = None,
-        password: Optional[str] = None,
+        self, document_id: str, config: Optional[dict[str, Any]] = None, password: Optional[str] = None
     ) -> OperationResponse:
         """Convert PDF to images."""
+        payload: dict[str, Any] = {"documentId": document_id}
+        if password is not None and password != "":
+            payload["password"] = password
+        if config:
+            payload.update(config)
+
         response = await self._make_request(
-            "POST",
-            "/api/documents/convert/pdf-to-image",
-            json={"documentId": document_id, "config": config, "password": password},
+            "POST", "/api/documents/convert/pdf-to-image", json=payload
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
@@ -407,16 +691,16 @@ class FoxitPDFClient:
     # PDF Manipulation operations
 
     async def pdf_split(
-        self,
-        document_id: str,
-        split_strategy: str,
-        config: Optional[dict[str, Any]] = None,
-        password: Optional[str] = None,
+        self, document_id: str, config: dict[str, Any]
     ) -> OperationResponse:
         """Split PDF."""
-        payload: dict[str, Any] = {"documentId": document_id, "splitStrategy": split_strategy, "password": password}
-        if config:
-            payload.update(config)
+        payload = {"documentId": document_id}
+        payload.update(config)
+
+        # Optional but recommended: enforce OpenAPI required field
+        if "pageCount" not in payload:
+            raise ValueError("pdf_split requires 'pageCount'")
+        
         response = await self._make_request(
             "POST", "/api/documents/modify/pdf-split", json=payload
         )
@@ -425,32 +709,53 @@ class FoxitPDFClient:
 
     async def pdf_merge(
         self,
-        documents: list[dict[str, Any]],
+        document_ids: list[str],
+        passwords: Optional[list[Optional[str]]] = None,
     ) -> OperationResponse:
-        """Merge PDFs."""
+        """Merge PDFs.
+
+        Args:
+            document_ids: List of document IDs to merge
+            passwords: Optional list of passwords (one per document).
+                      Use None for documents without passwords.
+                      If provided, must match length of document_ids.
+        """
+        if passwords is not None and len(passwords) != len(document_ids):
+            raise ValueError(
+                f"passwords list length ({len(passwords)}) must match document_ids length ({len(document_ids)})"
+            )
+        
+        document_infos = []
+        for i, doc_id in enumerate(document_ids):
+            doc_info: dict[str, Any] = {"documentId": doc_id}
+            if passwords and i < len(passwords):
+                pwd = passwords[i]
+                if pwd is not None and pwd != "":
+                    doc_info["password"] = pwd
+            document_infos.append(doc_info)
+        
+        payload = {"documentInfos": document_infos}
         response = await self._make_request(
             "POST",
             "/api/documents/enhance/pdf-combine",
-            # Different deployments validate different field names.
-            json={"documents": documents, "documentInfos": documents},
+            json=payload,
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
 
     async def pdf_extract(
-        self,
-        document_id: str,
-        extract_type: str,
-        config: Optional[dict[str, Any]] = None,
-        password: Optional[str] = None,
+        self, document_id: str, config: dict[str, Any]
     ) -> OperationResponse:
         """Extract pages from PDF."""
-        payload: dict[str, Any] = {
-            "documentId": document_id,
-            "extractType": extract_type,
-            "config": config,
-            "password": password,
-        }
+        payload: dict[str, Any] = {"documentId": document_id}
+        payload.update(config)
+
+        # OpenAPI requires extractType (PDFExtractRequest.required: documentId, extractType).
+        # OpenAPI: pageRange is a page filter and can be used with any extractType (example shows TEXT + pageRange).
+        # Default behavior when extractType is missing: default to TEXT.
+        if "extractType" not in payload or not payload.get("extractType"):
+            payload["extractType"] = "PAGE"
+
         response = await self._make_request(
             "POST", "/api/documents/modify/pdf-extract", json=payload
         )
@@ -458,40 +763,56 @@ class FoxitPDFClient:
         return OperationResponse(taskId=data["taskId"])
 
     async def pdf_compress(
-        self,
-        document_id: str,
-        compression_level: str,
-        password: Optional[str] = None,
+        self, document_id: str, password: Optional[str] = None
     ) -> OperationResponse:
-        """Compress PDF."""
+        """Compress PDF.
+
+        OpenAPI: POST /api/documents/modify/pdf-compress
+        Required body fields: documentId, compressionLevel
+        """
+        # Keep backwards compatibility with existing tools that call pdf_compress(document_id)
+        # by defaulting to MEDIUM compression.
+        compression_level = "MEDIUM"
+        payload: dict[str, Any] = {
+            "documentId": document_id,
+            "compressionLevel": compression_level,
+        }
+        if password is not None and password != "":
+            payload["password"] = password
         response = await self._make_request(
             "POST",
             "/api/documents/modify/pdf-compress",
-            json={
-                "documentId": document_id,
-                "compressionLevel": compression_level,
-                "password": password,
-            },
+            json=payload,
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
 
-    async def pdf_flatten(self, document_id: str, password: Optional[str] = None) -> OperationResponse:
+    async def pdf_flatten(
+        self, document_id: str, password: Optional[str] = None
+    ) -> OperationResponse:
         """Flatten PDF."""
+        payload: dict[str, Any] = {"documentId": document_id}
+        if password is not None and password != "":
+            payload["password"] = password
         response = await self._make_request(
             "POST",
             "/api/documents/modify/pdf-flatten",
-            json={"documentId": document_id, "password": password},
+            json=payload,
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
 
-    async def pdf_linearize(self, document_id: str) -> OperationResponse:
+    async def pdf_linearize(
+        self, document_id: str, password: Optional[str] = None
+    ) -> OperationResponse:
         """Linearize PDF."""
+        payload: dict[str, Any] = {"documentId": document_id}
+        if password is not None and password != "":
+            payload["password"] = password
         response = await self._make_request(
             "POST",
             "/api/documents/optimize/pdf-linearize",
-            json={"documentId": document_id},
+            json=payload,
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
@@ -499,18 +820,30 @@ class FoxitPDFClient:
     async def pdf_manipulate(
         self,
         document_id: str,
-        operations: list[dict[str, Any]],
+        config: dict[str, Any],
         password: Optional[str] = None,
     ) -> OperationResponse:
-        """Manipulate PDF pages."""
-        # Some deployments validate a non-empty `config` object.
+        """Manipulate PDF pages.
+
+        OpenAPI: POST /api/documents/modify/pdf-manipulate
+        Body schema: PDFPageOrganizeRequest { documentId, password?, config }
+        """
+        # Copy so callers can safely reuse the dict.
+        config_payload: dict[str, Any] = dict(config or {})
+
+        # Backwards compatibility: older tools stored password inside config.
+        config_password = config_payload.pop("password", None)
+        effective_password = password
+        if (effective_password is None or effective_password == "") and config_password:
+            effective_password = str(config_password)
+
         payload: dict[str, Any] = {
             "documentId": document_id,
-            "config": {"operations": operations},
-            # Also include legacy shape for compatibility.
-            "operations": operations,
-            "password": password,
+            "config": config_payload,
         }
+        if effective_password is not None and str(effective_password).strip() != "":
+            payload["password"] = str(effective_password)
+
         response = await self._make_request(
             "POST", "/api/documents/modify/pdf-manipulate", json=payload
         )
@@ -523,10 +856,11 @@ class FoxitPDFClient:
         self, document_id: str, config: dict[str, Any]
     ) -> OperationResponse:
         """Add password protection to PDF."""
+        payload = {"documentId": document_id}
+        payload.update(config)
+
         response = await self._make_request(
-            "POST",
-            "/api/documents/security/pdf-protect",
-            json={"documentId": document_id, "config": config},
+            "POST", "/api/documents/security/pdf-protect", json=payload
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
@@ -546,16 +880,14 @@ class FoxitPDFClient:
     # PDF Enhancement operations
 
     async def pdf_watermark(
-        self,
-        document_id: str,
-        config: dict[str, Any],
-        password: Optional[str] = None,
+        self, document_id: str, config: dict[str, Any]
     ) -> OperationResponse:
         """Add watermark to PDF."""
+        payload = {"documentId": document_id}
+        payload.update(config)
+
         response = await self._make_request(
-            "POST",
-            "/api/documents/enhance/pdf-watermark",
-            json={"documentId": document_id, "config": config, "password": password},
+            "POST", "/api/documents/enhance/pdf-watermark", json=payload
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
@@ -568,35 +900,43 @@ class FoxitPDFClient:
         document_id2: str,
         password1: Optional[str] = None,
         password2: Optional[str] = None,
+        config: Optional[dict[str, Any]] = None,
     ) -> OperationResponse:
         """Compare two PDFs."""
-        doc1 = {"documentId": document_id1, "password": password1}
-        doc2 = {"documentId": document_id2, "password": password2}
+        # OpenAPI: POST /api/documents/analyze/pdf-compare
+        # Body schema: PDFCompareRequest { baseDocument, compareDocument, config }
+        base_document: dict[str, Any] = {"documentId": document_id1}
+        compare_document: dict[str, Any] = {"documentId": document_id2}
+        if password1 is not None and password1 != "":
+            base_document["password"] = password1
+        if password2 is not None and password2 != "":
+            compare_document["password"] = password2
+
+        payload: dict[str, Any] = {
+            "baseDocument": base_document,
+            "compareDocument": compare_document,
+        }
+        if config:
+            payload["config"] = config
+
         response = await self._make_request(
             "POST",
             "/api/documents/analyze/pdf-compare",
-            json={
-                # Different deployments validate different field names.
-                "document1": doc1,
-                "document2": doc2,
-                "baseDocument": doc1,
-                "compareDocument": doc2,
-            },
+            json=payload,
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
 
     async def pdf_ocr(
-        self,
-        document_id: str,
-        config: Optional[dict[str, Any]] = None,
-        password: Optional[str] = None,
+        self, document_id: str, config: Optional[dict[str, Any]] = None
     ) -> OperationResponse:
         """Perform OCR on PDF."""
+        payload: dict[str, Any] = {"documentId": document_id}
+        if config:
+            payload.update(config)
+
         response = await self._make_request(
-            "POST",
-            "/api/documents/analyze/pdf-ocr",
-            json={"documentId": document_id, "config": config, "password": password},
+            "POST", "/api/documents/analyze/pdf-ocr", json=payload
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
@@ -604,25 +944,74 @@ class FoxitPDFClient:
     async def get_pdf_properties(
         self,
         document_id: str,
-        config: Optional[dict[str, Any]] = None,
-    ) -> OperationResponse:
-        """Get PDF properties (task-based; returns resultData)."""
-        response = await self._make_request(
+        include_extended_info: bool = True,
+        include_page_info: bool = True,
+        password: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Get PDF properties.
+
+        OpenAPI: POST /api/documents/analyze/get-pdf-properties (async)
+        This client method returns the final JSON result (task.resultData) to keep
+        the tool API ergonomic.
+        """
+
+        config: dict[str, Any] = {
+            "includeExtendedInfo": include_extended_info,
+            "includePageInfo": include_page_info,
+        }
+        payload: dict[str, Any] = {"documentId": document_id, "config": config}
+        if password is not None and password != "":
+            payload["password"] = password
+
+        start = await self._make_request(
             "POST",
             "/api/documents/analyze/get-pdf-properties",
-            json={"documentId": document_id, "config": config},
+            json=payload,
         )
-        data = await self._handle_response(response)
-        return OperationResponse(taskId=data["taskId"])
+        start_data = await self._handle_response(start)
+        task_id = start_data.get("taskId")
+        if not task_id:
+            raise FoxitAPIError(
+                message="Missing taskId from get-pdf-properties response",
+                code="INVALID_RESPONSE",
+                details=start_data,
+            )
 
-    async def pdf_structural_analysis(
-        self, document_id: str, password: Optional[str] = None
-    ) -> OperationResponse:
+        # Poll task until completion (duplicated here to avoid circular import with utils.task_poller)
+        timeout_seconds = self.default_timeout
+        start_time = asyncio.get_event_loop().time()
+        while True:
+            task_status = await self.get_task_status(task_id)
+            status = task_status.get("status")
+
+            if status == "COMPLETED":
+                result_data = task_status.get("resultData")
+                # resultData may be null for some tasks; normalize to dict.
+                return result_data if isinstance(result_data, dict) else {}
+
+            if status == "FAILED":
+                error_info = task_status.get("error", {})
+                raise FoxitAPIError(
+                    message=error_info.get("message", "Task failed without error details"),
+                    code=error_info.get("code", "TASK_FAILED"),
+                    details=error_info.get("details"),
+                )
+
+            elapsed = asyncio.get_event_loop().time() - start_time
+            if elapsed > timeout_seconds:
+                raise FoxitAPIError(
+                    message=f"Task {task_id} did not complete within {timeout_seconds}s",
+                    code="TASK_TIMEOUT",
+                )
+
+            await asyncio.sleep(self.poll_interval)
+
+    async def pdf_structural_analysis(self, document_id: str) -> OperationResponse:
         """Analyze PDF structure."""
         response = await self._make_request(
             "POST",
             "/api/documents/analyze/pdf-structural-analysis",
-            json={"documentId": document_id, "password": password},
+            json={"documentId": document_id},
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
@@ -633,10 +1022,14 @@ class FoxitPDFClient:
         self, document_id: str, password: Optional[str] = None
     ) -> OperationResponse:
         """Export PDF form data."""
+        # OpenAPI: POST /api/documents/forms/export-pdf-form-data
+        payload: dict[str, Any] = {"documentId": document_id}
+        if password is not None and password != "":
+            payload["password"] = password
         response = await self._make_request(
             "POST",
             "/api/documents/forms/export-pdf-form-data",
-            json={"documentId": document_id, "password": password},
+            json=payload,
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
@@ -648,10 +1041,14 @@ class FoxitPDFClient:
         password: Optional[str] = None,
     ) -> OperationResponse:
         """Import PDF form data."""
+        # OpenAPI: POST /api/documents/forms/import-pdf-form-data
+        payload: dict[str, Any] = {"documentId": document_id, "formData": form_data}
+        if password is not None and password != "":
+            payload["password"] = password
         response = await self._make_request(
             "POST",
             "/api/documents/forms/import-pdf-form-data",
-            json={"documentId": document_id, "formData": form_data, "password": password},
+            json=payload,
         )
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])

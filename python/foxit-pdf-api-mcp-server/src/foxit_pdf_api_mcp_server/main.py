@@ -2,12 +2,11 @@
 
 import argparse
 import asyncio
-import os
 import sys
 
 from .server import mcp
 
-#HTTP mode is not yet available. We are currently implementing it
+
 def main() -> None:
     """Run the MCP server."""
     parser = argparse.ArgumentParser(
@@ -30,8 +29,8 @@ def main() -> None:
         "--port",
         "-p",
         type=int,
-        default=int(os.getenv("SERVER_PORT", "8080")),
-        help="Port to bind to for HTTP transport (default: $SERVER_PORT or 8080)",
+        default=8000,
+        help="Port to bind to for HTTP transport (default: 8000)",
     )
 
     args = parser.parse_args()
@@ -41,7 +40,8 @@ def main() -> None:
         asyncio.run(mcp.run())
     elif args.transport == "http":
         # Run in HTTP mode
-        print(f"Starting Foxit PDF API MCP Server on http://{args.host}:{args.port}", file=sys.stderr)
+        print(
+            f"Starting Foxit PDF API MCP Server on http://{args.host}:{args.port}", file=sys.stderr)
         asyncio.run(mcp.run(transport="http", host=args.host, port=args.port))
 
 

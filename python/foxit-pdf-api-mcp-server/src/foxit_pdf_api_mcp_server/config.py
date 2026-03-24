@@ -19,6 +19,12 @@ class Config:
         # API Base URL
         self.api_base_url = self._get_api_base_url()
 
+        # Optional HTTP debugging
+        self.debug_http = self._get_bool_env(
+            "FOXIT_HTTP_DEBUG",
+            default=False,
+        )
+
         # API Credentials
         self.client_id = os.getenv("FOXIT_CLOUD_API_CLIENT_ID", "")
         self.client_secret = os.getenv("FOXIT_CLOUD_API_CLIENT_SECRET", "")
@@ -36,6 +42,12 @@ class Config:
         self.default_timeout = 300  # 5 minutes in seconds
         self.poll_interval = 2  # 2 seconds
         self.max_retries = 3
+
+    def _get_bool_env(self, key: str, default: bool = False) -> bool:
+        raw = os.getenv(key)
+        if raw is None:
+            return default
+        return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
 
     def _get_api_base_url(self) -> str:
         """
