@@ -5,9 +5,7 @@ import re
 from typing import Any, Optional
 
 from ..resources import client, mcp
-from ..utils import execute_and_wait
-from ._base import format_error_response
-from .share_link_helper import try_create_share_link
+from ._base import format_error_response, format_task_submitted_response, register_task
 
 
 WRITE_TOOL_ANNOTATIONS = {"readOnlyHint": False, "destructiveHint": False}
@@ -99,47 +97,27 @@ async def pdf_merge(
     - Use None for documents without passwords
     - Example: passwords=[None, "password123", None] for 3 documents where only the 2nd is protected
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
+
     Args:
         document_ids: List of document IDs to merge (in order)
         passwords: Optional list of passwords (one per document). Use None for unprotected documents.
 
     Returns:
         JSON string with:
-        - success, message
-        - resultDocumentId: identifier of the merged PDF, returned for follow-up
-          operations on the generated file
-        - shareUrl: public download URL for the merged PDF, when available
-        - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
-        result = await execute_and_wait(
-            client, lambda: client.pdf_merge(document_ids, passwords=passwords)
+        result = await client.pdf_merge(document_ids, passwords=passwords)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_merge", "PDFs merged successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "PDF merge submitted. Use get_task_result to check status and retrieve the download link.",
         )
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "PDFs merged successfully."
-            if (share or {}).get("shareUrl")
-            else "PDFs merged successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
     except Exception as error:
         return format_error_response(error)
 
@@ -163,6 +141,9 @@ async def pdf_split(
 
     Maximum file size: 100MB
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
+
     Args:
         document_id: Document ID of the PDF to split
         page_count: Number of pages per output file (must be >= 1)
@@ -170,11 +151,9 @@ async def pdf_split(
 
     Returns:
         JSON string with:
-        - success, message
-        - resultDocumentId: identifier of the ZIP file containing the split PDFs,
-            returned for follow-up operations on the generated file
-        - shareUrl: public download URL for the split-PDF ZIP, when available
-        - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
         if page_count is None or page_count <= 0:
@@ -184,32 +163,13 @@ async def pdf_split(
         if password is not None and password != "":
             config["password"] = password
 
-        result = await execute_and_wait(client, lambda: client.pdf_split(document_id, config))
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "PDF split successfully."
-            if (share or {}).get("shareUrl")
-            else "PDF split successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
+        result = await client.pdf_split(document_id, config)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_split", "PDF split successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "PDF split submitted. Use get_task_result to check status and retrieve the download link.",
+        )
     except Exception as error:
         return format_error_response(error)
 
@@ -233,6 +193,9 @@ async def pdf_extract_pages(
 
     Maximum file size: 100MB
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
+
     Args:
         document_id: Document ID of the PDF
         page_range: Pages to extract. Uses 1-based page numbers (page 1 is the first page).
@@ -241,44 +204,21 @@ async def pdf_extract_pages(
 
     Returns:
         JSON string with:
-        - success, message
-        - resultDocumentId: identifier of the extracted-page PDF, returned for
-            follow-up operations on the generated file
-        - shareUrl: public download URL for the extracted-page PDF, when available
-        - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
-        # OpenAPI supports extractType: TEXT | IMAGE | PAGE.
-        # This tool is specifically for extracting pages into a new PDF.
         config: dict[str, Any] = {"pageRange": page_range, "extractType": "PAGE"}
         if password is not None and password != "":
             config["password"] = password
-        result = await execute_and_wait(client, lambda: client.pdf_extract(document_id, config))
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "Pages extracted successfully."
-            if (share or {}).get("shareUrl")
-            else "Pages extracted successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
+        result = await client.pdf_extract(document_id, config)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_extract_pages", "Pages extracted successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "Page extraction submitted. Use get_task_result to check status and retrieve the download link.",
+        )
     except Exception as error:
         return format_error_response(error)
 
@@ -298,6 +238,10 @@ async def pdf_extract_text(
     - returns plain text and a generated .txt document.
     - pageRange controls which pages are processed (1-based) and also supports "all", "even", "odd".
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the result.
+    When complete, the result includes extracted text preview and a download link.
+
     Args:
         document_id: Document ID of the PDF
         page_range: Pages to extract text from. Uses 1-based page numbers (page 1 is the first page).
@@ -307,19 +251,11 @@ async def pdf_extract_text(
 
     Returns:
         JSON string with:
-                - success, message
-                - resultDocumentId: identifier of the generated .txt document, returned for
-                    follow-up operations on the generated file
-                - text: extracted text preview or full extracted text, depending on size
-                - textTruncated: whether the inline text preview was truncated
-                - fullTextRequiresDownload: returned when the full text must be downloaded from
-                    the generated result document
-                - shareUrl: public download URL for the generated .txt document, when available
-                - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
-        # Guardrails: avoid returning extremely large payloads in a single MCP response.
-        # Callers can still request smaller values; larger values will be clamped.
         if max_chars is not None and max_chars > 0:
             max_chars = min(max_chars, 200000)
 
@@ -327,61 +263,18 @@ async def pdf_extract_text(
         if password is not None and password != "":
             config["password"] = password
 
-        result = await execute_and_wait(client, lambda: client.pdf_extract(document_id, config))
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        extracted_text = ""
-        text_truncated = False
-        if result_document_id and max_chars is not None and max_chars > 0:
-            # Avoid loading a potentially large .txt into memory.
-            # Use a conservative UTF-8 upper bound: up to 4 bytes per code point.
-            max_bytes = max_chars * 4
-            content, bytes_truncated = await client.download_document_partial(
-                result_document_id,
-                max_bytes=max_bytes,
-            )
-            extracted_text = content.decode("utf-8-sig", errors="replace")
-            if len(extracted_text) > max_chars:
-                extracted_text = extracted_text[:max_chars]
-                text_truncated = True
-            text_truncated = text_truncated or bytes_truncated
-        elif result_document_id and (max_chars is None or max_chars <= 0):
-            # Caller asked for no inline text preview.
-            extracted_text = ""
-            text_truncated = False
-
-        message = "Text extracted successfully."
-        if text_truncated:
-            message = (
-                "Text extracted successfully (partial preview). "
-                "Download full content via shareUrl or resultDocumentId."
-            )
-
-        response = {
-            "success": True,
-            "message": message,
-            "text": extracted_text,
-            "textTruncated": text_truncated,
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if text_truncated:
-            response["fullTextRequiresDownload"] = True
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
+        result = await client.pdf_extract(document_id, config)
+        task_id = result["taskId"]
+        register_task(
+            task_id,
+            "pdf_extract_text",
+            "Text extracted successfully.",
+            max_chars=max_chars,
+        )
+        return format_task_submitted_response(
+            task_id,
+            "Text extraction submitted. Use get_task_result to check status and retrieve the extracted text.",
+        )
     except Exception as error:
         return format_error_response(error)
 
@@ -406,47 +299,27 @@ async def pdf_compress(document_id: str, password: str | None = None) -> str:
     - If the PDF is password-protected, provide the password via the password parameter
     - Without a valid password, the operation will fail with an authentication error
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
+
     Args:
         document_id: Document ID of the PDF to compress
         password: Password for password-protected PDFs. Optional. Provide only if the PDF requires a password.
 
     Returns:
         JSON string with:
-        - success, message
-        - resultDocumentId: identifier of the compressed PDF, returned for
-          follow-up operations on the generated file
-        - shareUrl: public download URL for the compressed PDF, when available
-        - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
-        result = await execute_and_wait(
-            client, lambda: client.pdf_compress(document_id, password=password)
+        result = await client.pdf_compress(document_id, password=password)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_compress", "PDF compressed successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "PDF compression submitted. Use get_task_result to check status and retrieve the download link.",
         )
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "PDF compressed successfully."
-            if (share or {}).get("shareUrl")
-            else "PDF compressed successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
     except Exception as error:
         return format_error_response(error)
 
@@ -475,47 +348,27 @@ async def pdf_flatten(document_id: str, password: str | None = None) -> str:
     - If the PDF is password-protected, provide the password via the password parameter
     - Without a valid password, the operation will fail with an authentication error
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
+
     Args:
         document_id: Document ID of the PDF to flatten
         password: Password for password-protected PDFs. Optional. Provide only if the PDF requires a password.
 
     Returns:
         JSON string with:
-        - success, message
-        - resultDocumentId: identifier of the flattened PDF, returned for
-          follow-up operations on the generated file
-        - shareUrl: public download URL for the flattened PDF, when available
-        - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
-        result = await execute_and_wait(
-            client, lambda: client.pdf_flatten(document_id, password=password)
+        result = await client.pdf_flatten(document_id, password=password)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_flatten", "PDF flattened successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "PDF flatten submitted. Use get_task_result to check status and retrieve the download link.",
         )
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "PDF flattened successfully."
-            if (share or {}).get("shareUrl")
-            else "PDF flattened successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
     except Exception as error:
         return format_error_response(error)
 
@@ -544,47 +397,27 @@ async def pdf_linearize(document_id: str, password: str | None = None) -> str:
     - If the PDF is password-protected, provide the password via the password parameter
     - Without a valid password, the operation will fail with an authentication error
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
+
     Args:
         document_id: Document ID of the PDF to linearize
         password: Password for password-protected PDFs. Optional. Provide only if the PDF requires a password.
 
     Returns:
         JSON string with:
-        - success, message
-        - resultDocumentId: identifier of the linearized PDF, returned for
-          follow-up operations on the generated file
-        - shareUrl: public download URL for the linearized PDF, when available
-        - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
-        result = await execute_and_wait(
-            client, lambda: client.pdf_linearize(document_id, password=password)
+        result = await client.pdf_linearize(document_id, password=password)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_linearize", "PDF linearized successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "PDF linearize submitted. Use get_task_result to check status and retrieve the download link.",
         )
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "PDF linearized successfully."
-            if (share or {}).get("shareUrl")
-            else "PDF linearized successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
     except Exception as error:
         return format_error_response(error)
 
@@ -763,6 +596,9 @@ async def pdf_manipulate(
     2. Call this tool with array of operations
     3. The tool automatically creates a share link and returns it
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
+
     Args:
         document_id: Document ID of the PDF to manipulate
         operations: Array of page manipulation operations (OpenAPI PPOOperation). Pages are 1-based.
@@ -770,43 +606,24 @@ async def pdf_manipulate(
 
     Returns:
         JSON string with:
-                - success, message
-                - resultDocumentId: identifier of the manipulated PDF, returned for
-                    follow-up operations on the generated file
-                - shareUrl: public download URL for the manipulated PDF, when available
-                - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
         config: dict[str, Any] = {"operations": operations}
 
-        result = await execute_and_wait(
-            client, lambda: client.pdf_manipulate(document_id, config, password=password)
+        result = await client.pdf_manipulate(document_id, config, password=password)
+        task_id = result["taskId"]
+        register_task(
+            task_id,
+            "pdf_manipulate",
+            f"PDF manipulated successfully with {len(operations)} operation(s).",
         )
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": f"PDF manipulated successfully with {len(operations)} operation(s)."
-            if (share or {}).get("shareUrl")
-            else f"PDF manipulated successfully with {len(operations)} operation(s), but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
+        return format_task_submitted_response(
+            task_id,
+            "PDF manipulation submitted. Use get_task_result to check status and retrieve the download link.",
+        )
     except Exception as error:
         return format_error_response(error)
 
@@ -890,20 +707,8 @@ async def pdf_delete_pages(
 
         config: dict[str, Any] = {"operations": operations}
 
-        result = await execute_and_wait(
-            client, lambda: client.pdf_manipulate(document_id, config, password=password)
-        )
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
+        result = await client.pdf_manipulate(document_id, config, password=password)
+        task_id = result["taskId"]
         ignored_notes: list[str] = []
         if out_of_range_pages:
             ignored_notes.append(f"out-of-range pages: {out_of_range_pages}")
@@ -911,25 +716,15 @@ async def pdf_delete_pages(
             ignored_notes.append(f"invalid tokens: {invalid_tokens}")
         ignored_suffix = f" Ignored {', '.join(ignored_notes)}." if ignored_notes else ""
 
-        response = {
-            "success": True,
-            "message": (
-                f"Deleted pages {sorted(in_range_pages_sorted)} from the PDF." + ignored_suffix
-            )
-            if (share or {}).get("shareUrl")
-            else (
-                f"Deleted pages {sorted(in_range_pages_sorted)} from the PDF, but no share link was created."
-                + ignored_suffix
-            ),
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
+        register_task(
+            task_id,
+            "pdf_delete_pages",
+            f"Deleted pages {sorted(in_range_pages_sorted)} from the PDF.{ignored_suffix}",
+        )
+        return format_task_submitted_response(
+            task_id,
+            "Page deletion submitted. Use get_task_result to check status and retrieve the download link.",
+        )
     except Exception as error:
         return format_error_response(error)
 
@@ -1068,20 +863,8 @@ async def pdf_rotate_pages(
 
         config: dict[str, Any] = {"operations": operations}
 
-        result = await execute_and_wait(
-            client, lambda: client.pdf_manipulate(document_id, config, password=password)
-        )
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
+        result = await client.pdf_manipulate(document_id, config, password=password)
+        task_id = result["taskId"]
         ignored_notes: list[str] = []
         if out_of_range_pages:
             ignored_notes.append(f"out-of-range pages: {out_of_range_pages}")
@@ -1089,25 +872,15 @@ async def pdf_rotate_pages(
             ignored_notes.append(f"invalid tokens: {invalid_tokens}")
         ignored_suffix = f" Ignored {', '.join(ignored_notes)}." if ignored_notes else ""
 
-        response = {
-            "success": True,
-            "message": (
-                f"Rotated pages {in_range_pages_sorted} using {rotation_enum}." + ignored_suffix
-            )
-            if (share or {}).get("shareUrl")
-            else (
-                f"Rotated pages {in_range_pages_sorted} using {rotation_enum}, but no share link was created."
-                + ignored_suffix
-            ),
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
+        register_task(
+            task_id,
+            "pdf_rotate_pages",
+            f"Rotated pages {in_range_pages_sorted} using {rotation_enum}.{ignored_suffix}",
+        )
+        return format_task_submitted_response(
+            task_id,
+            "Page rotation submitted. Use get_task_result to check status and retrieve the download link.",
+        )
     except Exception as error:
         return format_error_response(error)
 
@@ -1223,20 +996,8 @@ async def pdf_reorder_pages(
 
         config: dict[str, Any] = {"operations": operations}
 
-        result = await execute_and_wait(
-            client, lambda: client.pdf_manipulate(document_id, config, password=password)
-        )
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
+        result = await client.pdf_manipulate(document_id, config, password=password)
+        task_id = result["taskId"]
         ignored_notes: list[str] = []
         if out_of_range_pages:
             ignored_notes.append(f"out-of-range pages: {out_of_range_pages}")
@@ -1244,35 +1005,14 @@ async def pdf_reorder_pages(
             ignored_notes.append(f"invalid tokens: {invalid_tokens}")
         ignored_suffix = f" Ignored {', '.join(ignored_notes)}." if ignored_notes else ""
 
-        response = {
-            "success": True,
-            "message": (
-                f"Moved pages {in_range_pages_sorted} to position {target_pos}."
-                + (
-                    f" Requested target_position {requested_target_pos} was clamped to {target_pos}."
-                    if requested_target_pos != target_pos
-                    else ""
-                )
-                + ignored_suffix
-            )
-            if (share or {}).get("shareUrl")
-            else (
-                f"Moved pages {in_range_pages_sorted} to position {target_pos}, but no share link was created."
-                + (
-                    f" Requested target_position {requested_target_pos} was clamped to {target_pos}."
-                    if requested_target_pos != target_pos
-                    else ""
-                )
-                + ignored_suffix
-            ),
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
+        register_task(
+            task_id,
+            "pdf_reorder_pages",
+            f"Moved pages {in_range_pages_sorted} to position {target_pos}.{ignored_suffix}",
+        )
+        return format_task_submitted_response(
+            task_id,
+            "Page reorder submitted. Use get_task_result to check status and retrieve the download link.",
+        )
     except Exception as error:
         return format_error_response(error)

@@ -24,6 +24,22 @@ declare global {
     }
 }
 
+const getBridge = () => {
+    const mcp = window.mcpClient
+    const openai = window.openai
+    return {
+        toolInput: mcp?.toolInput ?? openai?.toolInput,
+        toolOutput: mcp?.toolOutput ?? openai?.toolOutput,
+        callTool: mcp?.callTool ?? openai?.callTool,
+        uploadFile: mcp?.uploadFile ?? openai?.uploadFile,
+        getFileDownloadUrl: mcp?.getFileDownloadUrl ?? openai?.getFileDownloadUrl,
+        requestDisplayMode: mcp?.requestDisplayMode ?? openai?.requestDisplayMode,
+        openExternal: mcp?.openExternal ?? openai?.openExternal,
+        requestClose: mcp?.requestClose ?? openai?.requestClose,
+        displayMode: mcp?.displayMode ?? openai?.displayMode,
+    }
+}
+
 const CLIENT_ID = "dadfa204c63194751e17dcae936f03eb"
 const isFullscreen = ref(false)
 const loading = ref(true)
@@ -39,18 +55,19 @@ let displayModeInterval: number | null = null
 
 
 const initPdfViewer = async () => {
-    if (!window.mcpClient?.toolInput) {
-        window.mcpClient?.requestClose?.()
+    const bridge = getBridge()
+    if (!bridge.toolInput) {
+        bridge.requestClose?.()
         return
     }
-    const toolInput = window.mcpClient?.toolInput
+    const toolInput = bridge.toolInput
     console.log('Tool input received:', toolInput)
 
     let pdfUrl: string | null = null
 
     // Try to get share URL from tool output first (pre-created by server)
     try {
-        const toolOutput = window.mcpClient?.toolOutput
+        const toolOutput = bridge.toolOutput
         const rawOutput = toolOutput?.result || toolOutput?.structuredContent?.result
         if (rawOutput) {
             const output = JSON.parse(typeof rawOutput === 'string' ? rawOutput : JSON.stringify(rawOutput))
@@ -64,9 +81,9 @@ const initPdfViewer = async () => {
     }
 
     // Fall back to callTool if shareUrl not available
-    if (!pdfUrl && window.mcpClient?.callTool) {
+    if (!pdfUrl && bridge.callTool) {
         try {
-            const result = await window.mcpClient.callTool('create_share_link', {
+            const result = await bridge.callTool('create_share_link', {
                 document_id: toolInput.document_id,
             })
             const rawToolResponse = result?.result || result?.structuredContent?.result
@@ -131,16 +148,17 @@ const initPdfViewer = async () => {
 }
 
 const toggleFullscreen = () => {
-    console.log('Current display mode:', window.mcpClient?.displayMode)
-    if (window.mcpClient?.displayMode === "inline") {
+    const bridge = getBridge()
+    console.log('Current display mode:', bridge.displayMode)
+    if (bridge.displayMode === "inline") {
         console.log('Requesting fullscreen mode')
         window.embedView.setUIGroupVisible(["FloatBar"], true);
-        window.mcpClient?.requestDisplayMode?.({ mode: "fullscreen" })
+        bridge.requestDisplayMode?.({ mode: "fullscreen" })
         document.body.style.height = "100%"
     } else {
         console.log('Requesting inline mode')
         window.embedView.setUIGroupVisible(["FloatBar"], false);
-        window.mcpClient?.requestDisplayMode?.({ mode: "inline" })
+        bridge.requestDisplayMode?.({ mode: "inline" })
         document.body.style.height = "600px"
     }
 }
@@ -156,13 +174,14 @@ const downloadPDF = async () => {
             }
         })
         .then(async function () {
+            const bridge = getBridge()
             const blob = new Blob(bufferArray, { type: "application/pdf" })
             const file = new File([blob], "Embed API Demo.pdf", { type: "application/pdf" })
-            const { fileId } = await window.mcpClient?.uploadFile?.(file)
-            const { downloadUrl } = await window.mcpClient?.getFileDownloadUrl?.({ fileId });
+            const { fileId } = await bridge.uploadFile?.(file)
+            const { downloadUrl } = await bridge.getFileDownloadUrl?.({ fileId });
 
             console.log('PDF Download URL:', downloadUrl)
-            await window.mcpClient?.openExternal?.({ href: downloadUrl })
+            await bridge.openExternal?.({ href: downloadUrl })
         }).finally(() => {
             loading.value = false
         })

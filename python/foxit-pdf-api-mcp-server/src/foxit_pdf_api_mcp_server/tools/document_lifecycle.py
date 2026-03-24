@@ -2,6 +2,8 @@
 
 import base64
 import json
+import os
+import sys
 from typing import Optional
 
 from ..resources import client, mcp
@@ -10,6 +12,18 @@ from ._base import format_error_response
 
 WRITE_TOOL_ANNOTATIONS = {"readOnlyHint": False, "destructiveHint": False}
 DESTRUCTIVE_TOOL_ANNOTATIONS = {"readOnlyHint": False, "destructiveHint": True}
+WIDGET_DEBUG = os.getenv("FOXIT_WIDGET_DEBUG", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "y",
+    "on",
+}
+
+
+def _widget_debug(msg: str) -> None:
+    if WIDGET_DEBUG:
+        print(f"[foxit:widget:upload] {msg}", file=sys.stderr)
 
 
 @mcp.tool(annotations=WRITE_TOOL_ANNOTATIONS)
@@ -42,6 +56,10 @@ async def upload_document(
     try:
         file_buffer: bytes
         actual_file_name: str
+        _widget_debug(
+            "upload_document called "
+            + f"file_name_present={bool(file_name)} file_content_present={bool(file_content)}"
+        )
         if not file_name:
             raise ValueError("file_name is required")
         if not file_content:
@@ -49,10 +67,16 @@ async def upload_document(
 
         file_buffer = base64.b64decode(file_content)
         actual_file_name = file_name
+        _widget_debug(
+            f"upload_document decoded file_name={actual_file_name} bytes={len(file_buffer)}"
+        )
         # Upload to API
         response = await client.upload_document(file_buffer, actual_file_name)
 
         document_id = response["documentId"]
+        _widget_debug(
+            f"upload_document success file_name={actual_file_name} document_id={document_id}"
+        )
         return json.dumps(
             {
                 "success": True,
@@ -63,6 +87,7 @@ async def upload_document(
         )
 
     except Exception as error:
+        _widget_debug(f"upload_document error: {type(error).__name__}: {error}")
         return format_error_response(error)
 
 

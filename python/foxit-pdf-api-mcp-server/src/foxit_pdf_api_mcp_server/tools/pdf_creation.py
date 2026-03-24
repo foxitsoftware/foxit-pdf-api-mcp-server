@@ -1,12 +1,9 @@
 """PDF creation tools: convert various formats to PDF."""
 
-import json
 from typing import Optional
 
 from ..resources import client, mcp
-from ..utils import execute_and_wait
-from ._base import format_error_response
-from .share_link_helper import try_create_share_link
+from ._base import format_error_response, format_task_submitted_response, register_task
 
 
 WRITE_TOOL_ANNOTATIONS = {"readOnlyHint": False, "destructiveHint": False}
@@ -29,50 +26,26 @@ async def pdf_from_word(document_id: str) -> str:
 
     Maximum file size: 100MB
 
-    Workflow:
-    1. Upload Word document using upload_document tool
-    2. Call this tool with the documentId
-    3. Wait for conversion to complete
-    4. The tool automatically creates a share link and returns it
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
 
     Args:
         document_id: Document ID of the uploaded Word file
 
     Returns:
         JSON string with:
-        - success, message
-                - resultDocumentId: identifier of the converted result document, returned for
-                    follow-up operations on the generated file
-        - shareUrl: public download URL for the converted PDF, when available
-        - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_from_word(document_id))
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "Word document converted to PDF successfully."
-            if (share or {}).get("shareUrl")
-            else "Word document converted to PDF successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
+        result = await client.pdf_from_word(document_id)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_from_word", "Word document converted to PDF successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "Word to PDF conversion submitted. Use get_task_result to check status and retrieve the download link.",
+        )
     except Exception as error:
         return format_error_response(error)
 
@@ -94,44 +67,26 @@ async def pdf_from_excel(document_id: str) -> str:
 
     Maximum file size: 100MB
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
+
     Args:
         document_id: Document ID of the uploaded Excel file
 
     Returns:
         JSON string with:
-        - success, message
-                - resultDocumentId: identifier of the converted result document, returned for
-                    follow-up operations on the generated file
-        - shareUrl: public download URL for the converted PDF, when available
-        - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_from_excel(document_id))
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "Excel document converted to PDF successfully."
-            if (share or {}).get("shareUrl")
-            else "Excel document converted to PDF successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
+        result = await client.pdf_from_excel(document_id)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_from_excel", "Excel document converted to PDF successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "Excel to PDF conversion submitted. Use get_task_result to check status and retrieve the download link.",
+        )
     except Exception as error:
         return format_error_response(error)
 
@@ -153,44 +108,26 @@ async def pdf_from_ppt(document_id: str) -> str:
 
     Maximum file size: 100MB
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
+
     Args:
         document_id: Document ID of the uploaded PowerPoint file
 
     Returns:
         JSON string with:
-        - success, message
-                - resultDocumentId: identifier of the converted result document, returned for
-                    follow-up operations on the generated file
-        - shareUrl: public download URL for the converted PDF, when available
-        - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_from_ppt(document_id))
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "PowerPoint document converted to PDF successfully."
-            if (share or {}).get("shareUrl")
-            else "PowerPoint document converted to PDF successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
+        result = await client.pdf_from_ppt(document_id)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_from_ppt", "PowerPoint document converted to PDF successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "PowerPoint to PDF conversion submitted. Use get_task_result to check status and retrieve the download link.",
+        )
     except Exception as error:
         return format_error_response(error)
 
@@ -212,44 +149,26 @@ async def pdf_from_text(document_id: str) -> str:
 
     Maximum file size: 100MB
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
+
     Args:
         document_id: Document ID of the uploaded text file
 
     Returns:
         JSON string with:
-        - success, message
-                - resultDocumentId: identifier of the converted result document, returned for
-                    follow-up operations on the generated file
-        - shareUrl: public download URL for the converted PDF, when available
-        - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_from_text(document_id))
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "Text file converted to PDF successfully."
-            if (share or {}).get("shareUrl")
-            else "Text file converted to PDF successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
+        result = await client.pdf_from_text(document_id)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_from_text", "Text file converted to PDF successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "Text to PDF conversion submitted. Use get_task_result to check status and retrieve the download link.",
+        )
     except Exception as error:
         return format_error_response(error)
 
@@ -271,44 +190,26 @@ async def pdf_from_image(document_id: str) -> str:
 
     Maximum file size: 100MB
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
+
     Args:
         document_id: Document ID of the uploaded image file
 
     Returns:
         JSON string with:
-        - success, message
-                - resultDocumentId: identifier of the converted result document, returned for
-                    follow-up operations on the generated file
-        - shareUrl: public download URL for the converted PDF, when available
-        - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_from_image(document_id))
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "Image converted to PDF successfully."
-            if (share or {}).get("shareUrl")
-            else "Image converted to PDF successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
+        result = await client.pdf_from_image(document_id)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_from_image", "Image converted to PDF successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "Image to PDF conversion submitted. Use get_task_result to check status and retrieve the download link.",
+        )
     except Exception as error:
         return format_error_response(error)
 
@@ -339,6 +240,9 @@ async def pdf_from_html(
 
     Maximum file size: 100MB
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
+
     Args:
         document_id: Document ID of the uploaded HTML file
         page_width: Page width in points (optional, default: 595 for A4)
@@ -346,11 +250,9 @@ async def pdf_from_html(
 
     Returns:
         JSON string with:
-                - success, message
-                - resultDocumentId: identifier of the converted result document, returned for
-                    follow-up operations on the generated file
-                - shareUrl: public download URL for the converted PDF, when available
-                - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
         config = {}
@@ -361,35 +263,13 @@ async def pdf_from_html(
             if page_height:
                 config["dimension"]["height"] = str(page_height)
 
-        result = await execute_and_wait(
-            client, lambda: client.pdf_from_html(
-                document_id, config if config else None)
+        result = await client.pdf_from_html(document_id, config if config else None)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_from_html", "HTML converted to PDF successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "HTML to PDF conversion submitted. Use get_task_result to check status and retrieve the download link.",
         )
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "HTML converted to PDF successfully."
-            if (share or {}).get("shareUrl")
-            else "HTML converted to PDF successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
     except Exception as error:
         return format_error_response(error)
 
@@ -427,6 +307,9 @@ async def pdf_from_url(
         2. Wait for async task completion (handled internally)
         3. Returns `resultDocumentId` plus a share link (when share creation succeeds)
 
+        This operation runs asynchronously. The tool returns a taskId immediately.
+        Use get_task_result to poll for completion and retrieve the download link.
+
         Args:
                 url: Publicly accessible URL of the web page to convert
                 page_width: Page width in points (optional; default A4 width is 595)
@@ -434,11 +317,9 @@ async def pdf_from_url(
 
         Returns:
             JSON string with:
-            - success, message
-            - resultDocumentId: identifier of the converted result document, returned for
-              follow-up operations on the generated file
-            - shareUrl: public download URL for the converted PDF, when available
-            - expiresAt: link expiration timestamp, if provided by the API
+            - success: operation was submitted successfully
+            - taskId: use with get_task_result to check status and retrieve the result
+            - message: describes next steps
     """
     try:
         config = {}
@@ -449,34 +330,12 @@ async def pdf_from_url(
             if page_height:
                 config["dimension"]["height"] = str(page_height)
 
-        result = await execute_and_wait(
-            client, lambda: client.pdf_from_url(
-                url, config if config else None)
+        result = await client.pdf_from_url(url, config if config else None)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_from_url", "URL converted to PDF successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "URL to PDF conversion submitted. Use get_task_result to check status and retrieve the download link.",
         )
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "URL converted to PDF successfully."
-            if (share or {}).get("shareUrl")
-            else "URL converted to PDF successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
     except Exception as error:
         return format_error_response(error)

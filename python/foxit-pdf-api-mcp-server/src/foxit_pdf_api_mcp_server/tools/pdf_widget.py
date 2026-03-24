@@ -1,6 +1,8 @@
 """PDF Widget tools for MCP client integration."""
 
 import json
+import os
+import sys
 from typing import Optional
 from pydantic import BaseModel
 
@@ -8,6 +10,18 @@ from ..resources import mcp, client, PDF_TOOLS_WIDGET_TEMPLATE_URI, VIEWER_WIDGE
 
 
 READ_ONLY_TOOL_ANNOTATIONS = {"readOnlyHint": True, "destructiveHint": False}
+WIDGET_DEBUG = os.getenv("FOXIT_WIDGET_DEBUG", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "y",
+    "on",
+}
+
+
+def _widget_debug(msg: str) -> None:
+    if WIDGET_DEBUG:
+        print(f"[foxit:widget:tool] {msg}", file=sys.stderr)
 
 
 @mcp.tool(
@@ -26,6 +40,7 @@ async def show_pdf_viewer(document_id: str) -> str:
         JSON string with widget display status and document ID
     """
     share_url = None
+    _widget_debug(f"show_pdf_viewer called document_id={document_id}")
     try:
         result = await client.create_share_link(document_id=document_id)
         share_url = result.get("shareUrl")
@@ -43,6 +58,10 @@ async def show_pdf_viewer(document_id: str) -> str:
         "message": f"Displaying PDF document with document ID: {document_id}",
         "instructions": "Use the widget above to view the PDF document.",
     }
+
+    _widget_debug(
+        f"show_pdf_viewer returning widget_uri={response['widget']['uri']} share_url_present={bool(share_url)}"
+    )
 
     return json.dumps(response, ensure_ascii=False, indent=2)
 
@@ -96,6 +115,9 @@ async def show_pdf_tools(
         Includes resultData.request: { message } when provided.
     """
     display_message = message or "Please upload a document to get started."
+    _widget_debug(
+        f"show_pdf_tools called user_intent={user_intent!r} message_present={message is not None}"
+    )
     response = {
         "success": True,
         "widget": {
@@ -118,5 +140,9 @@ async def show_pdf_tools(
             "2. Call mcp tools according to 'user_intent' after upload is complete",
         ]
     }
+
+    _widget_debug(
+        f"show_pdf_tools returning widget_uri={response['widget']['uri']} next_steps={len(response['next_steps'])}"
+    )
 
     return json.dumps(response, ensure_ascii=False, indent=2)

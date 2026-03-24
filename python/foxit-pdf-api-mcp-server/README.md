@@ -20,7 +20,7 @@ Model Context Protocol (MCP) server that exposes [Foxit Cloud PDF API](https://d
 
 ### Prerequisites
 
-- Python 3.11 or higher
+- Python 3.10 or higher
 - [uv](https://github.com/astral-sh/uv) package manager (recommended) or pip
 
 ### 1. Get API Credentials

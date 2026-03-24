@@ -34,4 +34,7 @@ from .tools import pdf_analysis  # noqa: E402, F401
 # PDF forms tools
 # from .tools import pdf_forms  # noqa: E402, F401
 
+# Task status tool (async task polling)
+from .tools import task_status  # noqa: E402, F401
+
 from .tools import pdf_widget  # noqa: E402, F401
