@@ -9,6 +9,46 @@ _SHARE_URL_HYPERLINK_REMINDER = (
 )
 
 
+# ---------------------------------------------------------------------------
+# Task registry – tracks metadata for submitted async tasks so that
+# get_task_result can perform the correct post-processing (e.g. create share
+# links, download text previews) without the caller having to pass extra info.
+# ---------------------------------------------------------------------------
+
+_task_registry: dict[str, dict[str, Any]] = {}
+
+
+def register_task(task_id: str, tool_name: str, success_message: str, **extra: Any) -> None:
+    """Register an async task with metadata for later retrieval."""
+    _task_registry[task_id] = {
+        "tool_name": tool_name,
+        "success_message": success_message,
+        **extra,
+    }
+
+
+def get_task_meta(task_id: str) -> dict[str, Any] | None:
+    """Return metadata for a registered task, or ``None``."""
+    return _task_registry.get(task_id)
+
+
+def unregister_task(task_id: str) -> None:
+    """Remove a task from the registry (called after completion/failure)."""
+    _task_registry.pop(task_id, None)
+
+
+def format_task_submitted_response(task_id: str, message: str) -> str:
+    """Format a response for an async task that was just submitted."""
+    return json.dumps(
+        {
+            "success": True,
+            "taskId": task_id,
+            "message": message,
+        },
+        indent=2,
+    )
+
+
 def format_success_response(
     task_id: str,
     result_document_id: Optional[str] = None,

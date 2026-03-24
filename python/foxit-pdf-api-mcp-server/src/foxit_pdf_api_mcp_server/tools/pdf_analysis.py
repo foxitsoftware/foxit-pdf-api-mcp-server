@@ -1,12 +1,9 @@
 """PDF Analysis tools for Foxit PDF API MCP Server."""
 
-import json
 from typing import Optional
 
 from ..resources import client, mcp
-from ..utils import execute_and_wait
-from ._base import format_error_response
-from .share_link_helper import try_create_share_link
+from ._base import format_error_response, format_task_submitted_response, register_task
 
 
 WRITE_TOOL_ANNOTATIONS = {"readOnlyHint": False, "destructiveHint": False}
@@ -44,54 +41,30 @@ async def pdf_compare(
     3. Call this tool with both documentIds
     4. The tool automatically creates a share link and returns it
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
+
     Required dependencies:
     - document_id1 and document_id2 must be valid uploaded PDF document identifiers
     - password1 and password2 are only required when the corresponding PDFs are protected
 
     Returns:
         JSON string with:
-        - success, message
-        - shareUrl: public download URL for the generated diff PDF, when available
-        - expiresAt: link expiration timestamp, if provided by the API
-        - resultDocumentId: returned only when a share link could not be created and the
-          generated result identifier is needed for follow-up retrieval
-
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
-        # Force the API to return a visual diff PDF.
-        # OpenAPI: PDFCompareConfig.resultType = "PDF".
         config = {"compareType": "ALL", "resultType": "PDF"}
-        result = await execute_and_wait(
-            client,
-            lambda: client.pdf_compare(
-                document_id1, document_id2, password1, password2, config
-            ),
+        result = await client.pdf_compare(
+            document_id1, document_id2, password1, password2, config
         )
-
-        result_document_id = result.get("resultDocumentId")
-        share, share_error = (None, None)
-        if result_document_id:
-            share, share_error = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "PDFs compared successfully."
-            if (share or {}).get("shareUrl")
-            else "PDFs compared successfully, but no share link was created.",
-        }
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-        if not (share or {}).get("shareUrl") and result_document_id:
-            response["resultDocumentId"] = result_document_id
-
-        return json.dumps(response, indent=2)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_compare", "PDFs compared successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "PDF comparison submitted. Use get_task_result to check status and retrieve the diff PDF.",
+        )
     except Exception as error:
         return format_error_response(error)
 

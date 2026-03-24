@@ -1,12 +1,12 @@
 [project]
 name = "foxit-pdf-api-mcp-server"
-version = "0.2.3"
+version = "1.0.3"
 description = "MCP server for Foxit PDF API"
 authors = [
     {name = "Foxit Software Inc.", email = "support@foxitsoftware.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 keywords = ["mcp", "pdf", "foxit", "fastmcp"]
 classifiers = [
@@ -14,13 +14,14 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
 dependencies = [
-    "fastmcp>=2.12.4",
+    "fastmcp>=2.14.2",
     "httpx>=0.28.0",
     "pydantic>=2.10.0",
     "python-dotenv>=1.0.0",
@@ -48,14 +49,14 @@ dev = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W"]
 ignore = ["E501"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.10"
 strict = true
 warn_return_any = true
 warn_unused_configs = true

@@ -1,12 +1,9 @@
 """PDF conversion tools: convert PDF to various formats."""
 
-import json
 from typing import Optional
 
 from ..resources import client, mcp
-from ..utils import execute_and_wait
-from ._base import format_error_response
-from .share_link_helper import try_create_share_link
+from ._base import format_error_response, format_task_submitted_response, register_task
 
 
 WRITE_TOOL_ANNOTATIONS = {"readOnlyHint": False, "destructiveHint": False}
@@ -29,11 +26,8 @@ async def pdf_to_word(document_id: str, password: str | None = None) -> str:
 
     Maximum file size: 100MB
 
-    Workflow:
-    1. Upload PDF using upload_document tool
-    2. Call this tool with the documentId
-    3. Wait for conversion to complete
-    4. The tool automatically creates a share link and returns it
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
 
     Password-protected PDFs:
     - If the PDF is password-protected, provide the password via the password parameter
@@ -45,39 +39,18 @@ async def pdf_to_word(document_id: str, password: str | None = None) -> str:
 
     Returns:
         JSON string with:
-        - success, message
-                - resultDocumentId: identifier of the converted result document, returned for
-                    follow-up operations on the generated file
-        - shareUrl: public download URL for the converted Word file, when available
-        - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_to_word(document_id, password=password))
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "PDF converted to Word successfully. Display the download link as a hyperlink with the converted Word filename as the link text, not the raw URL."
-            if (share or {}).get("shareUrl")
-            else "PDF converted to Word successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
+        result = await client.pdf_to_word(document_id, password=password)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_to_word", "PDF converted to Word successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "PDF to Word conversion submitted. Use get_task_result to check status and retrieve the download link.",
+        )
     except Exception as error:
         return format_error_response(error)
 
@@ -106,45 +79,27 @@ async def pdf_to_excel(document_id: str, password: str | None = None) -> str:
     - If the PDF is password-protected, provide the password via the password parameter
     - Without a valid password, the operation will fail with an authentication error
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
+
     Args:
         document_id: Document ID of the uploaded PDF file
         password: Password for password-protected PDFs. Optional. Provide only if the PDF requires a password.
 
     Returns:
         JSON string with:
-        - success, message
-                - resultDocumentId: identifier of the converted result document, returned for
-                    follow-up operations on the generated file
-        - shareUrl: public download URL for the converted Excel file, when available
-        - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_to_excel(document_id, password=password))
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "PDF converted to Excel successfully. Display the download link as a hyperlink with the converted Excel filename as the link text, not the raw URL."
-            if (share or {}).get("shareUrl")
-            else "PDF converted to Excel successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
+        result = await client.pdf_to_excel(document_id, password=password)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_to_excel", "PDF converted to Excel successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "PDF to Excel conversion submitted. Use get_task_result to check status and retrieve the download link.",
+        )
     except Exception as error:
         return format_error_response(error)
 
@@ -171,45 +126,27 @@ async def pdf_to_ppt(document_id: str, password: str | None = None) -> str:
     - If the PDF is password-protected, provide the password via the password parameter
     - Without a valid password, the operation will fail with an authentication error
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
+
     Args:
         document_id: Document ID of the uploaded PDF file
         password: Password for password-protected PDFs. Optional. Provide only if the PDF requires a password.
 
     Returns:
         JSON string with:
-        - success, message
-                - resultDocumentId: identifier of the converted result document, returned for
-                    follow-up operations on the generated file
-        - shareUrl: public download URL for the converted PowerPoint file, when available
-        - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_to_ppt(document_id, password=password))
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "PDF converted to PowerPoint successfully. Display the download link as a hyperlink with the converted PowerPoint filename as the link text, not the raw URL."
-            if (share or {}).get("shareUrl")
-            else "PDF converted to PowerPoint successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
+        result = await client.pdf_to_ppt(document_id, password=password)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_to_ppt", "PDF converted to PowerPoint successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "PDF to PowerPoint conversion submitted. Use get_task_result to check status and retrieve the download link.",
+        )
     except Exception as error:
         return format_error_response(error)
 
@@ -240,6 +177,9 @@ async def pdf_to_text(
     - If the PDF is password-protected, provide the password via the password parameter
     - Without a valid password, the operation will fail with an authentication error
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
+
     Args:
         document_id: Document ID of the uploaded PDF file
         page_range: Optional page range (e.g., "1,3,5-10", "all", "even", "odd")
@@ -247,46 +187,24 @@ async def pdf_to_text(
 
     Returns:
         JSON string with:
-        - success, message
-                - resultDocumentId: identifier of the converted result document, returned for
-                    follow-up operations on the generated file
-        - shareUrl: public download URL for the converted text file, when available
-        - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
         config = {}
         if page_range:
             config["pageRange"] = page_range
 
-        result = await execute_and_wait(
-            client, lambda: client.pdf_to_text(
-                document_id, config if config else None, password=password)
+        result = await client.pdf_to_text(
+            document_id, config if config else None, password=password
         )
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "PDF converted to text successfully. Display the download link as a hyperlink with the converted text filename as the link text, not the raw URL."
-            if (share or {}).get("shareUrl")
-            else "PDF converted to text successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_to_text", "PDF converted to text successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "PDF to text conversion submitted. Use get_task_result to check status and retrieve the download link.",
+        )
     except Exception as error:
         return format_error_response(error)
 
@@ -313,45 +231,27 @@ async def pdf_to_html(document_id: str, password: str | None = None) -> str:
     - If the PDF is password-protected, provide the password via the password parameter
     - Without a valid password, the operation will fail with an authentication error
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
+
     Args:
         document_id: Document ID of the uploaded PDF file
         password: Password for password-protected PDFs. Optional. Provide only if the PDF requires a password.
 
     Returns:
         JSON string with:
-        - success, message
-                - resultDocumentId: identifier of the converted result document, returned for
-                    follow-up operations on the generated file
-        - shareUrl: public download URL for the converted HTML file, when available
-        - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
     """
     try:
-        result = await execute_and_wait(client, lambda: client.pdf_to_html(document_id, password=password))
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "PDF converted to HTML successfully. Display the download link as a hyperlink with the converted HTML filename as the link text, not the raw URL."
-            if (share or {}).get("shareUrl")
-            else "PDF converted to HTML successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
+        result = await client.pdf_to_html(document_id, password=password)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_to_html", "PDF converted to HTML successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "PDF to HTML conversion submitted. Use get_task_result to check status and retrieve the download link.",
+        )
     except Exception as error:
         return format_error_response(error)
 
@@ -384,6 +284,9 @@ async def pdf_to_image(
     - If the PDF is password-protected, provide the password via the password parameter
     - Without a valid password, the operation will fail with an authentication error
 
+    This operation runs asynchronously. The tool returns a taskId immediately.
+    Use get_task_result to poll for completion and retrieve the download link.
+
     Args:
         document_id: Document ID of the uploaded PDF file
         page_range: Optional page range (e.g., "1,3,5-10", "all", "even", "odd")
@@ -393,10 +296,9 @@ async def pdf_to_image(
 
     Returns:
         JSON string with:
-        - success, message
-        - resultDocumentId: identifier of the converted result document, returned for follow-up operations on the generated file
-        - shareUrl: public download URL for the converted image output, when available
-        - expiresAt: link expiration timestamp, if provided by the API
+        - success: operation was submitted successfully
+        - taskId: use with get_task_result to check status and retrieve the result
+        - message: describes next steps
         Note: Result is a ZIP file containing the images
     """
     try:
@@ -408,34 +310,14 @@ async def pdf_to_image(
         if dpi:
             config["dpi"] = dpi
 
-        result = await execute_and_wait(
-            client, lambda: client.pdf_to_image(
-                document_id, config if config else None, password=password)
+        result = await client.pdf_to_image(
+            document_id, config if config else None, password=password
         )
-
-        result_document_id = result.get("resultDocumentId")
-        share = None
-        if result_document_id:
-            share, _ = await try_create_share_link(
-                client.create_share_link,
-                document_id=result_document_id,
-                expiration_minutes=None,
-                filename=None,
-            )
-
-        response = {
-            "success": True,
-            "message": "PDF converted to images successfully. Display the download link as a hyperlink with the converted image archive filename as the link text, not the raw URL."
-            if (share or {}).get("shareUrl")
-            else "PDF converted to images successfully, but no share link was created.",
-        }
-        if result_document_id:
-            response["resultDocumentId"] = result_document_id
-        if (share or {}).get("shareUrl"):
-            response["shareUrl"] = share.get("shareUrl")
-        if (share or {}).get("expiresAt"):
-            response["expiresAt"] = share.get("expiresAt")
-
-        return json.dumps(response, indent=2)
+        task_id = result["taskId"]
+        register_task(task_id, "pdf_to_image", "PDF converted to images successfully.")
+        return format_task_submitted_response(
+            task_id,
+            "PDF to image conversion submitted. Use get_task_result to check status and retrieve the download link.",
+        )
     except Exception as error:
         return format_error_response(error)

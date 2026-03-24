@@ -19,11 +19,24 @@ from .client import FoxitPDFClient
 from .config import config
 import mcp.types as types
 import os
+import sys
 
 # Widget template resources
 PDF_TOOLS_WIDGET_TEMPLATE_URI = "ui://widget/foxit-pdf-tools.html"
 VIEWER_WIDGET_TEMPLATE_URI = "ui://widget/foxit-pdf-viewer.html"
 WIDGET_MIME_TYPE = "text/html+skybridge"
+WIDGET_DEBUG = os.getenv("FOXIT_WIDGET_DEBUG", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "y",
+    "on",
+}
+
+
+def _widget_debug(msg: str) -> None:
+    if WIDGET_DEBUG:
+        print(f"[foxit:widget] {msg}", file=sys.stderr)
 
 # Create Foxit PDF API client
 client = FoxitPDFClient(
@@ -62,7 +75,11 @@ def _load_widget_html(component_name: str) -> str:
     widget_html_path = web_dist_dir / f"{component_name}.html"
     if not widget_html_path.exists():
         raise FileNotFoundError(f"Widget HTML not found at {widget_html_path}")
-    return widget_html_path.read_text(encoding="utf8")
+    html = widget_html_path.read_text(encoding="utf8")
+    _widget_debug(
+        f"loaded html component={component_name} path={widget_html_path} bytes={len(html.encode('utf-8'))}"
+    )
+    return html
 
 
 widgets: list[Widget] = [
@@ -88,18 +105,31 @@ widgets: list[Widget] = [
 
 
 def _tool_meta(widget: Widget) -> dict[str, any]:
+    widget_csp = {
+        "connect_domains": ["data:", "blob:", "https://*.foxit.com", "https://*.foxitcloud.com"],
+        "redirect_domains": ["https://*.foxit.com", "https://*.foxitcloud.com"],
+        "resource_domains": [
+            "data:",
+            "blob:",
+            "https://cdn.tailwindcss.com",
+            "https://cdn.jsdelivr.net",
+            "https://unpkg.com",
+            "https://threejs.org",
+            "https://*.foxit.com",
+            "https://*.foxitcloud.com",
+        ],
+    }
+
     return {
         "mcp/outputTemplate": widget.template_uri,
+        # Compatibility keys for hosts implementing OpenAI-style widget metadata mapping.
+        "openai/outputTemplate": widget.template_uri,
         "mcp/toolInvocation/invoking": widget.invoking,
         "mcp/toolInvocation/invoked": widget.invoked,
         "mcp/widgetAccessible": True,
+        "openai/widgetAccessible": True,
         "mcp/widgetDomain": "https://pdfonline.foxit.com",
-        "mcp/widgetCSP": {
-            "connect_domains": ["data:", "blob:", "https://*.foxit.com", "https://*.foxitcloud.com"],
-            "redirect_domains": ["https://*.foxit.com", "https://*.foxitcloud.com"],
-            "resource_domains": [
-                "data:", "blob:", "https://cdn.tailwindcss.com", "https://cdn.jsdelivr.net", "https://unpkg.com", "https://threejs.org", "https://*.foxit.com", "https://*.foxitcloud.com"],
-        },
+        "mcp/widgetCSP": widget_csp,
     }
 
 
@@ -109,8 +139,10 @@ WIDGETS_BY_URI: dict[str, Widget] = {
 
 
 async def _handle_read_resource(req: types.ReadResourceRequest) -> types.ServerResult:
+    _widget_debug(f"read_resource requested uri={req.params.uri}")
     widget = WIDGETS_BY_URI.get(str(req.params.uri))
     if widget is None:
+        _widget_debug(f"read_resource miss uri={req.params.uri}")
         return types.ServerResult(
             types.ReadResourceResult(
                 contents=[],
@@ -127,6 +159,10 @@ async def _handle_read_resource(req: types.ReadResourceRequest) -> types.ServerR
         )
     ]
 
+    _widget_debug(
+        f"read_resource hit uri={widget.template_uri} mime={WIDGET_MIME_TYPE} html_bytes={len(widget.html.encode('utf-8'))}"
+    )
+
     return types.ServerResult(types.ReadResourceResult(contents=contents))
 
 
@@ -135,6 +171,7 @@ mcp._mcp_server.request_handlers[types.ReadResourceRequest] = _handle_read_resou
 
 @mcp._mcp_server.list_resources()
 async def _list_resources() -> list[types.Resource]:
+    _widget_debug("list_resources called")
     return [
         types.Resource(
             name=widget.title,
@@ -150,6 +187,7 @@ async def _list_resources() -> list[types.Resource]:
 
 @mcp._mcp_server.list_resource_templates()
 async def _list_resource_templates() -> list[types.ResourceTemplate]:
+    _widget_debug("list_resource_templates called")
     return [
         types.ResourceTemplate(
             name=widget.title,
@@ -165,9 +203,16 @@ async def _list_resource_templates() -> list[types.ResourceTemplate]:
 
 @mcp.custom_route("/.well-known/mcp-challenge", methods=["GET", "OPTIONS"])
 async def protected_resource_metadata(request: Request) -> Response:
+    _widget_debug(f"mcp_challenge route method={request.method}")
     if request.method == "OPTIONS":
         return Response(status_code=204)
     # Verification token
     secret = os.getenv("VERIFICATION_TOKEN",
                        "efNPN4EpRwooH8-R7LAmpmoxZPPzie3Ns5HFyQHaOIQ")
     return Response(content=secret, media_type="text/plain")
+
+
+_widget_debug(
+    "widget registry initialized "
+    + ", ".join([f"{w.identifier}:{w.template_uri}" for w in widgets])
+)
