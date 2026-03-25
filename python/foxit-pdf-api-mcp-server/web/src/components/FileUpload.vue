@@ -105,6 +105,7 @@ import DocIcon from '@/svg/doc.svg?component'
 import ErrorIcon from '@/svg/error.svg?component'
 import LoadingIcon from '@/svg/loading.svg?component'
 import VectorIcon from '@/svg/vector.svg?component'
+import { App } from '@modelcontextprotocol/ext-apps'
 
 // Define file item type
 interface ExtendedFileItem {
@@ -117,193 +118,52 @@ interface ExtendedFileItem {
   uploading?: boolean
 }
 
-interface WidgetBridge {
-  // State & data
-  toolInput?: any
-  toolOutput?: any
-  toolResponseMetadata?: any
-  widgetState?: any
-  setWidgetState?: (state: any) => void
-
-  // Widget runtime APIs
-  callTool?: (name: string, args: any) => Promise<any>
-  sendFollowUpMessage?: (params: { prompt: string }) => Promise<void>
-  uploadFile?: (file: File) => Promise<any>
-  getFileDownloadUrl?: (params: { fileId: string }) => Promise<any>
-  requestDisplayMode?: (params: { mode: 'inline' | 'pip' | 'fullscreen' }) => Promise<void>
-  requestModal?: (params: any) => Promise<void>
-  notifyIntrinsicHeight?: (height: number) => void
-  openExternal?: (params: any) => Promise<void>
-  setOpenInAppUrl?: (params: any) => void
-  requestClose?: () => void
-
-  // Context
-  theme?: 'light' | 'dark'
-  displayMode?: 'inline' | 'pip' | 'fullscreen'
-  maxHeight?: number
-  safeArea?: { top: number; right: number; bottom: number; left: number }
-  view?: string
-  userAgent?: string
-  locale?: string
-}
-
-const getBridge = (): WidgetBridge => {
-  const mcp = window.mcpClient
-  const openai = window.openai
-  return {
-    toolInput: mcp?.toolInput ?? openai?.toolInput,
-    toolOutput: mcp?.toolOutput ?? openai?.toolOutput,
-    toolResponseMetadata: mcp?.toolResponseMetadata ?? openai?.toolResponseMetadata,
-    widgetState: mcp?.widgetState ?? openai?.widgetState,
-    setWidgetState: mcp?.setWidgetState ?? openai?.setWidgetState,
-
-    callTool: mcp?.callTool ?? openai?.callTool,
-    sendFollowUpMessage: mcp?.sendFollowUpMessage ?? openai?.sendFollowUpMessage,
-    uploadFile: mcp?.uploadFile ?? openai?.uploadFile,
-    getFileDownloadUrl: mcp?.getFileDownloadUrl ?? openai?.getFileDownloadUrl,
-    requestDisplayMode: mcp?.requestDisplayMode ?? openai?.requestDisplayMode,
-    requestModal: mcp?.requestModal ?? openai?.requestModal,
-    notifyIntrinsicHeight: mcp?.notifyIntrinsicHeight ?? openai?.notifyIntrinsicHeight,
-    openExternal: mcp?.openExternal ?? openai?.openExternal,
-    setOpenInAppUrl: mcp?.setOpenInAppUrl ?? openai?.setOpenInAppUrl,
-    requestClose: mcp?.requestClose ?? openai?.requestClose,
-
-    theme: mcp?.theme ?? openai?.theme,
-    displayMode: mcp?.displayMode ?? openai?.displayMode,
-    maxHeight: mcp?.maxHeight ?? openai?.maxHeight,
-    safeArea: mcp?.safeArea ?? openai?.safeArea,
-    view: mcp?.view ?? openai?.view,
-    userAgent: mcp?.userAgent ?? openai?.userAgent,
-    locale: mcp?.locale ?? openai?.locale,
-  }
-}
-
 const fileList = ref<ExtendedFileItem[]>([])
 const isProcessing = ref(false)
+const mcpApp = ref<App | null>(null)
+const toolInput = ref<Record<string, unknown> | null>(null)
 
-// Restore state from widgetState on mount
-onMounted(() => {
-  const bridge = getBridge()
-  if (!window.mcpClient && !window.openai) {
-    return
+onMounted(async () => {
+  const app = new App({ name: 'Foxit PDF Tools', version: '1.0.0' })
+
+  app.ontoolinput = (input) => {
+    toolInput.value = input
+    if (input === null) {
+      app.requestTeardown()
+    }
   }
-  if (bridge.toolInput === null) {
-    bridge.requestClose?.()
-    return
-  }
+
+  await app.connect()
+  mcpApp.value = app
 })
 
 const uploadDisabled = () => {
   return fileList.value.filter(f => f.status === 'uploading').length > 0 || fileList.value.filter(f => f.status === 'done').length === 0
 }
 
-const extractToolTextPayload = (toolResult: any): string => {
-  const textFromContent =
-    toolResult?.content?.find?.((c: any) => c?.type === 'text')?.text
-    ?? toolResult?.result?.content?.find?.((c: any) => c?.type === 'text')?.text
-
-  const directText =
-    toolResult?.result
-    ?? toolResult?.structuredContent?.result
-    ?? toolResult?.result?.structuredContent?.result
-    ?? textFromContent
-
-  if (typeof directText === 'string' && directText.trim().length > 0) {
-    return directText
-  }
-
-  // Some hosts may already deserialize the payload to object.
-  const directObject =
-    toolResult?.structuredContent
-    ?? toolResult?.result?.structuredContent
-    ?? toolResult
-
-  if (directObject && typeof directObject === 'object') {
-    return JSON.stringify(directObject)
-  }
-
-  throw new Error('Unable to parse upload_document tool response payload')
-}
-
-/**
- * Wrapper around bridge.callTool that works around a Host bug where the
- * callTool Promise never resolves because the response carries callId: NaN
- * (NaN !== NaN so the Host's own matching fails).
- *
- * Strategy — three-way race:
- *  1. bridge.callTool() Promise (works when Host matches callId correctly)
- *  2. postMessage listener for "openai:callTool:response" (fallback when
- *     callId is null, NaN, or otherwise un-matchable)
- *  3. Timeout safety net
- */
-const callToolWithFallback = (toolName: string, args: any): Promise<any> => {
-  const bridge = getBridge()
-  if (!bridge.callTool) {
-    return Promise.reject(new Error('MCP client API is not available'))
-  }
-  return new Promise((resolve, reject) => {
-    let settled = false
-    const TIMEOUT = 120_000 // 120 seconds
-
-    const settle = (fn: () => void) => {
-      if (!settled) {
-        settled = true
-        window.removeEventListener('message', onMessage)
-        clearTimeout(timer)
-        fn()
-      }
-    }
-
-    // Listen for the Host posting the raw response via postMessage.
-    // Accept callId that is null, undefined, NaN, or any non-finite value,
-    // because the Host may fail to propagate a valid callId.
-    const onMessage = (ev: MessageEvent) => {
-      try {
-        const data = ev.data
-        if (
-          data?.type === 'openai:callTool:response' &&
-          (data?.callId == null || Number.isNaN(data?.callId)) &&
-          data?.result
-        ) {
-          settle(() => resolve(data.result))
-        }
-      } catch { /* ignore parse errors */ }
-    }
-
-    window.addEventListener('message', onMessage)
-
-    // Also try the normal callTool Promise path
-    bridge.callTool!(toolName, args)
-      .then((r: any) => settle(() => resolve(r)))
-      .catch((e: any) => settle(() => reject(e)))
-
-    const timer = setTimeout(() => {
-      settle(() => reject(new Error(`Tool call timeout after ${TIMEOUT / 1000}s`)))
-    }, TIMEOUT)
-  })
-}
-
 // Upload single file to server
 const uploadFile = async (fileItem: ExtendedFileItem) => {
-  if (!fileItem.file) return
+  if (!fileItem.file || !mcpApp.value) return
 
   const index = fileList.value.findIndex(f => f.uid === fileItem.uid)
   if (index === -1) return
 
   try {
-    const bridge = getBridge()
-    if (!bridge.callTool) {
-      throw new Error('MCP client API is not available')
-    }
-
     const base64Content = await fileToBase64(fileItem.file)
-    const result = await callToolWithFallback('upload_document', {
-      file_content: base64Content,
-      file_name: fileItem.name
+    const result = await mcpApp.value.callServerTool({
+      name: 'upload_document',
+      arguments: {
+        file_content: base64Content,
+        file_name: fileItem.name
+      }
     })
 
-    const rawToolResponse = extractToolTextPayload(result)
-    const parsed = JSON.parse(rawToolResponse)
+    const textItem = result?.content?.find((c) => c.type === 'text')
+    const textContent = textItem && 'text' in textItem ? textItem.text : undefined
+    if (!textContent) {
+      throw new Error('upload_document did not return text content')
+    }
+    const parsed = JSON.parse(textContent)
 
     if (!parsed?.success) {
       const errorMessage = parsed?.error?.message || parsed?.message || 'Upload failed on server side'
@@ -409,45 +269,35 @@ const handleFileChange = async (fileItemList: any[]) => {
 
 // Handle file processing (call MCP server tools)
 const handleProcessFiles = async () => {
-  console.log(fileList)
   const uploadedFiles = fileList.value.filter(f => f.documentId && f.status === 'done')
-  console.log(uploadedFiles)
   if (uploadedFiles.length === 0) {
     Message.warning('No files uploaded yet')
+    return
+  }
+
+  if (!mcpApp.value) {
+    Message.error('MCP App not connected')
     return
   }
 
   try {
     isProcessing.value = true
 
-    const bridge = getBridge()
-
-    if (!bridge.sendFollowUpMessage) {
-      Message.error('SendFollowUpMessage API not available')
-      return
-    }
-
     // Build message containing document IDs
     const fileDetails = uploadedFiles.map(f => `- Document ID: ${f.documentId} (${f.name})`).join('\n')
-    const toolInput = bridge.toolInput
+    const userIntent = toolInput.value?.user_intent ?? ''
     const prompt = `
-    user_intent: [${toolInput.user_intent}]
+    user_intent: [${userIntent}]
     uploaded_documents:
       ${fileDetails}
     Please invoke the mcp tool according to the user_intent and the uploaded documents.`
     console.log('Sending prompt:', prompt)
-    await bridge.sendFollowUpMessage({
-      prompt: prompt
-    })
+    await mcpApp.value.sendMessage({ role: 'user', content: [{ type: 'text', text: prompt }] })
   } catch (error) {
     console.error('Failed to send message:', error)
   } finally {
     isProcessing.value = false
-    const bridge = getBridge()
-    if (window.mcpClient || window.openai) {
-      bridge.setWidgetState?.(bridge.widgetState) // Clear widget state after processing
-      bridge.requestClose?.() // Close the widget
-    }
+    mcpApp.value?.requestTeardown()
   }
 }
 
@@ -468,14 +318,6 @@ const formatFileSize = (bytes: number | undefined): string => {
   }
 
   return `${size.toFixed(2)} ${units[unitIndex]}`
-}
-
-// Extend widget bridge types definition
-declare global {
-  interface Window {
-    mcpClient?: WidgetBridge
-    openai?: WidgetBridge
-  }
 }
 </script>
 
