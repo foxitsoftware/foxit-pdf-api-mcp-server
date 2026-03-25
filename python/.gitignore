@@ -1,0 +1,12 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+*.egg*
+
+# Virtual and local environments
+venv*
+dist
+.env
+.venv
+mcp_sharepoint.log
+.history
