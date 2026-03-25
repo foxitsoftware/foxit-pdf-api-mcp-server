@@ -6,7 +6,8 @@ import sys
 from typing import Optional
 from pydantic import BaseModel
 
-from ..resources import mcp, client, PDF_TOOLS_WIDGET_TEMPLATE_URI, VIEWER_WIDGET_TEMPLATE_URI, _tool_meta, WIDGETS_BY_URI
+from ..resources import mcp, client, PDF_TOOLS_WIDGET_TEMPLATE_URI, VIEWER_WIDGET_TEMPLATE_URI
+from fastmcp.server.apps import AppConfig
 
 
 READ_ONLY_TOOL_ANNOTATIONS = {"readOnlyHint": True, "destructiveHint": False}
@@ -26,7 +27,7 @@ def _widget_debug(msg: str) -> None:
 
 @mcp.tool(
     annotations=READ_ONLY_TOOL_ANNOTATIONS,
-    meta=_tool_meta(WIDGETS_BY_URI[VIEWER_WIDGET_TEMPLATE_URI]),
+    app=AppConfig(resource_uri=VIEWER_WIDGET_TEMPLATE_URI),
 )
 async def show_pdf_viewer(document_id: str) -> str:
     """
@@ -74,7 +75,7 @@ class DocumentInfo(BaseModel):
 
 @mcp.tool(
     annotations=READ_ONLY_TOOL_ANNOTATIONS,
-    meta=_tool_meta(WIDGETS_BY_URI[PDF_TOOLS_WIDGET_TEMPLATE_URI]),
+    app=AppConfig(resource_uri=PDF_TOOLS_WIDGET_TEMPLATE_URI),
 )
 async def show_pdf_tools(
     user_intent: str,
