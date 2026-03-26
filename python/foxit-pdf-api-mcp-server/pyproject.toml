@@ -69,3 +69,6 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+markers = [
+    "e2e: end-to-end tests that call the real Foxit Cloud API (require network + valid .env credentials)",
+]

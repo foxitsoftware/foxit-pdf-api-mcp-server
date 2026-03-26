@@ -5,6 +5,10 @@ import sys
 from typing import Optional
 from urllib.parse import urlparse
 
+
+class ConfigurationError(Exception):
+    """Raised when required configuration is missing or invalid."""
+
 from dotenv import load_dotenv
 
 # Load environment variables from .env file if present
@@ -31,12 +35,10 @@ class Config:
 
         # Validate credentials
         if not self.client_id or not self.client_secret:
-            print(
-                "Error: FOXIT_CLOUD_API_CLIENT_ID and FOXIT_CLOUD_API_CLIENT_SECRET "
-                "environment variables are required",
-                file=sys.stderr,
+            raise ConfigurationError(
+                "FOXIT_CLOUD_API_CLIENT_ID and FOXIT_CLOUD_API_CLIENT_SECRET "
+                "environment variables are required"
             )
-            sys.exit(1)
 
         # Operation settings
         self.default_timeout = 300  # 5 minutes in seconds
@@ -69,12 +71,10 @@ class Config:
         )
 
         if not url:
-            print(
-                "Error: FOXIT_CLOUD_API_BASE_URL or FOXIT_CLOUD_API_HOST "
-                "environment variable is required",
-                file=sys.stderr,
+            raise ConfigurationError(
+                "FOXIT_CLOUD_API_BASE_URL or FOXIT_CLOUD_API_HOST "
+                "environment variable is required"
             )
-            sys.exit(1)
 
         # Validate URL format
         try:
@@ -82,8 +82,7 @@ class Config:
             if not parsed.scheme or not parsed.netloc:
                 raise ValueError("Invalid URL format")
         except Exception as e:
-            print(f"Error: Invalid API base URL format: {url}", file=sys.stderr)
-            sys.exit(1)
+            raise ConfigurationError(f"Invalid API base URL format: {url}") from e
 
         # Remove trailing slashes
         return url.rstrip("/")

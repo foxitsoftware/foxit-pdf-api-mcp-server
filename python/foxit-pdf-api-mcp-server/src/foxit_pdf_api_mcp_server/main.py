@@ -4,11 +4,15 @@ import argparse
 import asyncio
 import sys
 
-from .server import mcp
-
 
 def main() -> None:
     """Run the MCP server."""
+    try:
+        from .server import mcp
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
     parser = argparse.ArgumentParser(
         description="Foxit PDF API MCP Server",
         formatter_class=argparse.RawDescriptionHelpFormatter,
