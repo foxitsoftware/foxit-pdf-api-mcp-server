@@ -1,0 +1,55 @@
+﻿# Foxit Cloud API MCP TestCase 
+
+Foxit Cloud API are a comprehensive suite of **RESTful cloud-based APIs** built on Foxit’s  
+industry-leading document processing technology and scalable cloud infrastructure, enabling  
+developers to integrate robust PDF, eSign, and document automation capabilities directly into  
+applications, platforms, and workflows. 
+## Core API Suite 
+Foxit Cloud API ecosystem consists of four primary API modules, covering the full document  
+lifecycle: 
+### 1. PDF Services API 
+A server-side API for automated, high-volume PDF processing. 
+- **Core Functions**: PDF creation/conversion (Word, Excel, HTML ↔ PDF), compression,  
+splitting/merging, content redaction, optimization, linearization, and data extraction (text, tables,  
+structured fields). 
+- **Use Cases**: Batch document processing, back-end workflow automation, compliance  
+archiving, and data parsing for BI/AI pipelines. 
+
+### 2. Document Generation API 
+Enables dynamic document creation from structured data and templates. 
+- **Core Functions**: Generate branded PDFs/DOCX from JSON/CRM/form data; populate  
+templates with variables (names, pricing, tables); automate contracts, invoices, reports, and  
+disclosures. 
+- **Use Cases**: Personalized document delivery, on-demand report generation, and scalable  
+template-driven document production. 
+
+### 3. eSign API 
+API-first electronic signature workflow automation. 
+- **Core Functions**: Trigger signing flows, embed signature experiences, manage signer  
+identities/roles, capture consent, maintain tamper-evident audit trails, and ensure compliance with  
+eIDAS/ESIGN Act. 
+- **Use Cases**: End-to-end contract signing, consent collection, and legally binding digital  
+signature integration. 
+
+### 4. PDF Embed API 
+Lightweight in-app PDF viewing and interaction. 
+- **Core Functions**: Embed customizable PDF viewers with annotations, form-filling, collaboration, 
+and access control; no plugins/downloads required. 
+- **Use Cases**: In-portal document review, customer-facing PDF previews, and collaborative  
+annotation workflows. 
+
+## Key Platform Features 
+- **Developer-Centric**: Clean REST design, real-time sandbox, pre-built workflows, full  
+documentation, SDKs, and live code demos. 
+- **Enterprise-Grade Security**: TLS 1.2+/AES-256 encryption (in transit/rest), RBAC, PKI  
+signatures, SOC 2 Type II, ISO 27001, and compliance with HIPAA, GDPR, FERPA, CCPA, 21  
+CFR Part 11. 
+- **Scalability**: Cloud-native architecture for high-volume processing with no infrastructure  
+overhead. 
+- **End-to-End Coverage**: Unified platform for document generation → processing → signing →  
+archival. 
+
+## Getting Started 
+1. Create a free developer account for API keys, docs, and tools. 
+2. Test via live demos and generate code snippets. 
+3. Integrate into your stack and deploy workflows. 

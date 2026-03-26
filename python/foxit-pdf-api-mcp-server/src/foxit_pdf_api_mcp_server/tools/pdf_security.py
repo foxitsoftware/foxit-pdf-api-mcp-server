@@ -1,7 +1,7 @@
 """PDF security tools: protect and remove password protection."""
 
 import json
-from typing import Optional
+from typing import Any, Optional
 
 from ..resources import client, mcp
 from ..utils import execute_and_wait
@@ -62,18 +62,30 @@ async def pdf_protect(
         - expiresAt: link expiration timestamp, if provided by the API
     """
     try:
-        config = {
-            "permissions": {
-                "printing": allow_printing,
-                "copying": allow_copying,
-                "editing": allow_editing,
-            }
-        }
+        inner: dict[str, Any] = {}
 
         if user_password:
-            config["userPassword"] = user_password
+            inner["userPassword"] = user_password
         if owner_password:
-            config["ownerPassword"] = owner_password
+            inner["ownerPassword"] = owner_password
+
+        # userPermissions only takes effect when ownerPassword is set.
+        if owner_password:
+            permissions: list[str] = []
+            if allow_printing:
+                permissions += ["PRINT_NORMAL_QUALITY", "PRINT_HIGH_QUALITY"]
+            if allow_copying:
+                permissions.append("COPY_CONTENT")
+            if allow_editing:
+                permissions += [
+                    "EDIT_CONTENT",
+                    "EDIT_FILL_AND_SIGN_FORM_FIELDS",
+                    "EDIT_ANNOTATION",
+                    "EDIT_DOCUMENT_ASSEMBLY",
+                ]
+            inner["userPermissions"] = permissions
+
+        config: dict[str, Any] = {"config": inner} if inner else {}
 
         result = await execute_and_wait(client, lambda: client.pdf_protect(document_id, config))
 
