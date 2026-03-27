@@ -149,7 +149,7 @@ async def protected_resource_metadata(request: Request) -> Response:
         return Response(status_code=204)
     # Verification token
     secret = os.getenv("VERIFICATION_TOKEN",
-                       "efNPN4EpRwooH8-R7LAmpmoxZPPzie3Ns5HFyQHaOIQ")
+                       "REDACTED")
     return Response(content=secret, media_type="text/plain")
 
 
