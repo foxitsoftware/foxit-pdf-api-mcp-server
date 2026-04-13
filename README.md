@@ -22,11 +22,6 @@ This directory contains multiple implementations of the Foxit PDF API MCP Server
 
 👉 **[View TypeScript README](./typescript/foxit-pdf-api-mcp-server/README.md)** for installation and usage instructions.
 
-### ⚠️ **stdio-python** (Legacy)
-- **Location**: [`stdio-python/`](./stdio-python/)
-- **Status**: ⚠️ **DEPRECATED** - Use the new Python version above instead
-- **Note**: This was the original implementation and is no longer maintained
-
 ## Features
 
 Both Python and TypeScript versions provide:
