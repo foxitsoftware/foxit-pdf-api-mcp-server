@@ -13,12 +13,11 @@
   "scripts": {
     "build": "tsup",
     "start": "node dist/server.js",
-    "dev": "fastmcp dev src/stdio-server.ts",
+    "dev": "tsx src/http-server.ts",
     "lint": "prettier --check . && eslint . && tsc --noEmit",
     "test": "vitest run",
     "format": "prettier --write . && eslint --fix .",
     "inspect": "fastmcp inspect dist/index.js"
-
   },
   "keywords": [
     "fastmcp",
@@ -31,6 +30,7 @@
   "license": "MIT",
   "description": "MCP server for Foxit PDF API",
   "dependencies": {
+    "dotenv": "^17.4.2",
     "fastmcp": "^3.20.0",
     "zod": "^3.24.4"
   },

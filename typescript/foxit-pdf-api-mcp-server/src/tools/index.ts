@@ -1,6 +1,9 @@
 // Document lifecycle tools
 export * from "./document-lifecycle";
 
+// Task status
+export * from "./task-status";
+
 // PDF creation tools (to PDF)
 export * from "./pdf-from-word";
 export * from "./pdf-from-excel";
@@ -25,3 +28,6 @@ export * from "./pdf-advanced-operations";
 
 // PDF analysis and forms
 export * from "./pdf-analysis-forms";
+
+// Widget tools (MCP App UI)
+export * from "./pdf-widget";

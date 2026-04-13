@@ -6,6 +6,12 @@ import type {
   TaskResponse,
 } from "../types/api";
 
+export interface ShareLinkResponse {
+  shareUrl: string;
+  token: string;
+  expiresAt: string;
+}
+
 /**
  * HTTP Client for Foxit PDF API
  * Handles all direct API interactions without MCP-specific logic
@@ -80,6 +86,31 @@ export class FoxitPDFClient {
     if (!response.ok) {
       throw await this.createApiError(response);
     }
+  }
+
+  /**
+   * Create a time-limited public share link for a document
+   */
+  async createShareLink(
+    documentId: string,
+    expirationMinutes?: number,
+    filename?: string
+  ): Promise<ShareLinkResponse> {
+    const payload: Record<string, unknown> = {};
+    if (expirationMinutes !== undefined) payload.expirationMinutes = expirationMinutes;
+    if (filename !== undefined) payload.filename = filename;
+
+    const response = await this.fetchWithAuth(
+      `/api/documents/${documentId}/share`,
+      {
+        method: "POST",
+        ...(Object.keys(payload).length > 0
+          ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+          : {}),
+      }
+    );
+
+    return this.handleResponse<ShareLinkResponse>(response);
   }
 
   /**

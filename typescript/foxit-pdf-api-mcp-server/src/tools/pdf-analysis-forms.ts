@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import type { FoxitPDFClient } from "../client";
-import { executeAndWait } from "../utils/task-poller";
 
 // ============ Analysis Tools ============
 
@@ -9,27 +8,10 @@ export const pdfCompareTool = (client: FoxitPDFClient) => ({
   name: "pdf_compare",
   description: `Compare two PDF documents and generate a comparison report.
 
-Compares:
-- Text content differences
-- Visual layout changes
-- Added/removed content
-- Modified sections
+The result is a PDF report highlighting differences between the two documents.
 
-The result is a PDF report highlighting differences with:
-- Red annotations for deletions
-- Green annotations for additions
-- Yellow highlights for modifications
-
-Use cases:
-- Document version control
-- Contract review
-- Quality assurance
-- Change tracking
-
-Workflow:
-1. Upload both PDFs using upload_document tool
-2. Call this tool with both documentIds
-3. Download comparison report using download_document tool`,
+This operation runs asynchronously. The tool returns a taskId immediately.
+Use get_task_result to poll for completion and retrieve the download link.`,
   parameters: z.object({
     documentId1: z.string().describe("First PDF document ID"),
     documentId2: z.string().describe("Second PDF document ID"),
@@ -43,32 +25,29 @@ Workflow:
     password2?: string;
   }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfCompare(
-          args.documentId1,
-          args.documentId2,
-          args.password1,
-          args.password2
-        )
+      const { taskId } = await client.pdfCompare(
+        args.documentId1,
+        args.documentId2,
+        args.password1,
+        args.password2
       );
-
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
-        message: `PDFs compared successfully. Download comparison report using documentId: ${result.resultDocumentId}`,
+        taskId,
+        message: "PDF comparison submitted. Use get_task_result to check status and retrieve the download link.",
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "COMPARE_FAILED",
+        errorType: (error as { code?: string }).code ?? "COMPARE_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }
   },
 });
 
+// NOTE: TypeScript-only — Python has this tool commented out (planned, not yet enabled).
 export const pdfOcrTool = (client: FoxitPDFClient) => ({
   name: "pdf_ocr",
   description: `Perform OCR (Optical Character Recognition) on a PDF document.
@@ -119,35 +98,31 @@ Workflow:
     password?: string;
   }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfOcr(
-          args.documentId,
-          {
-            languages: args.languages,
-            pageRanges: args.pageRanges,
-          },
-          args.password
-        )
+      const { taskId } = await client.pdfOcr(
+        args.documentId,
+        {
+          languages: args.languages,
+          pageRanges: args.pageRanges,
+        },
+        args.password
       );
-
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
-        languages: args.languages || ["en-US"],
-        message: `OCR completed successfully. Download searchable PDF using documentId: ${result.resultDocumentId}`,
+        taskId,
+        message: "OCR submitted. Use get_task_result to check status and retrieve the download link.",
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "OCR_FAILED",
+        errorType: (error as { code?: string }).code ?? "OCR_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }
   },
 });
 
+// NOTE: TypeScript-only — Python has this tool commented out (planned, not yet enabled).
 export const pdfStructuralAnalysisTool = (client: FoxitPDFClient) => ({
   name: "pdf_structural_analysis",
   description: `Perform comprehensive structural analysis on a PDF document.
@@ -195,21 +170,17 @@ Workflow:
   }),
   execute: async (args: { documentId: string; password?: string }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfStructuralAnalysis(args.documentId, args.password)
-      );
-
+      const { taskId } = await client.pdfStructuralAnalysis(args.documentId, args.password);
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
-        message: `Structural analysis completed. Download ZIP archive using documentId: ${result.resultDocumentId}`,
+        taskId,
+        message: "Structural analysis submitted. Use get_task_result to check status and retrieve the download link.",
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "ANALYSIS_FAILED",
+        errorType: (error as { code?: string }).code ?? "ANALYSIS_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }
@@ -262,10 +233,7 @@ Workflow:
   }),
   execute: async (args: { documentId: string; password?: string }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.exportPdfFormData(args.documentId, args.password)
-      );
-
+      const result = await client.exportPdfFormData(args.documentId, args.password);
       return JSON.stringify({
         success: true,
         taskId: result.taskId,
@@ -276,7 +244,7 @@ Workflow:
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "EXPORT_FORM_FAILED",
+        errorType: (error as { code?: string }).code ?? "EXPORT_FORM_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }
@@ -340,10 +308,7 @@ Workflow:
     password?: string;
   }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.importPdfFormData(args.documentId, args.formData, args.password)
-      );
-
+      const result = await client.importPdfFormData(args.documentId, args.formData, args.password);
       return JSON.stringify({
         success: true,
         taskId: result.taskId,
@@ -355,7 +320,7 @@ Workflow:
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "IMPORT_FORM_FAILED",
+        errorType: (error as { code?: string }).code ?? "IMPORT_FORM_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }

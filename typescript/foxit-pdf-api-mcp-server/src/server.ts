@@ -4,14 +4,19 @@ import { FoxitPDFClient } from "./client";
 import { config } from "./config";
 import { VERSION } from "./version";
 import {
+  createShareLinkTool,
   deleteDocumentTool,
   downloadDocumentTool,
   exportPdfFormDataTool,
+  getTaskResultTool,
   getPdfPropertiesTool,
   importPdfFormDataTool,
   pdfCompareTool,
   pdfCompressTool,
+  pdfDeletePagesTool,
   pdfExtractTool,
+  pdfExtractPagesTool,
+  pdfExtractTextTool,
   pdfFlattenTool,
   pdfFromExcelTool,
   pdfFromHtmlTool,
@@ -26,6 +31,8 @@ import {
   pdfOcrTool,
   pdfProtectTool,
   pdfRemovePasswordTool,
+  pdfReorderPagesTool,
+  pdfRotatePagesTool,
   pdfSplitTool,
   pdfStructuralAnalysisTool,
   pdfToExcelTool,
@@ -36,6 +43,12 @@ import {
   pdfToWordTool,
   pdfWatermarkTool,
   uploadDocumentTool,
+  showPdfToolsTool,
+  showPdfViewerTool,
+  pdfToolsHtml,
+  pdfViewerHtml,
+  PDF_TOOLS_WIDGET_URI,
+  PDF_VIEWER_WIDGET_URI,
 } from "./tools";
 
 // Initialize Foxit PDF API client
@@ -68,6 +81,8 @@ export const server = new FastMCP({
 server.addTool(uploadDocumentTool(foxitClient));
 server.addTool(downloadDocumentTool(foxitClient));
 server.addTool(deleteDocumentTool(foxitClient));
+server.addTool(createShareLinkTool(foxitClient));
+server.addTool(getTaskResultTool(foxitClient));
 
 // PDF creation tools
 server.addTool(pdfFromWordTool(foxitClient));
@@ -89,9 +104,14 @@ server.addTool(pdfToImageTool(foxitClient));
 // PDF manipulation tools
 server.addTool(pdfSplitTool(foxitClient));
 server.addTool(pdfExtractTool(foxitClient));
+server.addTool(pdfExtractPagesTool(foxitClient));
+server.addTool(pdfExtractTextTool(foxitClient));
 server.addTool(pdfFlattenTool(foxitClient));
 server.addTool(pdfCompressTool(foxitClient));
 server.addTool(pdfManipulateTool(foxitClient));
+server.addTool(pdfDeletePagesTool(foxitClient));
+server.addTool(pdfRotatePagesTool(foxitClient));
+server.addTool(pdfReorderPagesTool(foxitClient));
 server.addTool(pdfMergeTool(foxitClient));
 server.addTool(pdfProtectTool(foxitClient));
 server.addTool(pdfRemovePasswordTool(foxitClient));
@@ -107,3 +127,19 @@ server.addTool(pdfStructuralAnalysisTool(foxitClient));
 // Forms tools
 server.addTool(exportPdfFormDataTool(foxitClient));
 server.addTool(importPdfFormDataTool(foxitClient));
+
+// Widget tools (MCP App UI)
+server.addResource({
+  uri: PDF_TOOLS_WIDGET_URI,
+  name: "Foxit PDF Tools Widget",
+  mimeType: "text/html",
+  load: async () => ({ text: pdfToolsHtml() }),
+});
+server.addResource({
+  uri: PDF_VIEWER_WIDGET_URI,
+  name: "Foxit PDF Viewer Widget",
+  mimeType: "text/html",
+  load: async () => ({ text: pdfViewerHtml() }),
+});
+server.addTool(showPdfToolsTool(foxitClient));
+server.addTool(showPdfViewerTool(foxitClient));

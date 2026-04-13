@@ -127,7 +127,74 @@ Usage: Always call this tool first before performing any PDF operations.`,
 });
 
 /**
+ * Create share link tool — mirrors Python's create_share_link tool.
+ */
+export const createShareLinkTool = (client: FoxitPDFClient) => ({
+  name: "create_share_link",
+  description: `Create a time-limited public download link for an existing uploaded document.
+
+Required dependency:
+- document_id must be the uploaded document identifier returned by the PDF Tools widget
+  or another prior document-upload step. This tool cannot create a share link without it.
+
+Optional parameters:
+- expiration_minutes: 10-1440 minutes (API default: 30 minutes)
+- filename: custom filename for download
+
+Returns:
+  JSON with:
+  - success, message
+  - shareUrl: public download URL
+  - expiresAt: link expiration timestamp, if provided by the API`,
+  parameters: z.object({
+    document_id: z.string().describe("Document ID to create a share link for"),
+    expiration_minutes: z
+      .number()
+      .int()
+      .min(10)
+      .max(1440)
+      .optional()
+      .describe("Link expiration in minutes (10–1440, default: 30)"),
+    filename: z
+      .string()
+      .optional()
+      .describe("Custom filename for the download link"),
+  }),
+  execute: async (args: {
+    document_id: string;
+    expiration_minutes?: number;
+    filename?: string;
+  }) => {
+    try {
+      const result = await client.createShareLink(
+        args.document_id,
+        args.expiration_minutes,
+        args.filename
+      );
+
+      return JSON.stringify(
+        {
+          success: true,
+          message: "Share link created successfully.",
+          shareUrl: result.shareUrl,
+          ...(result.expiresAt ? { expiresAt: result.expiresAt } : {}),
+        },
+        null,
+        2
+      );
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        errorType: (error as { code?: string }).code ?? "SHARE_LINK_FAILED",
+      });
+    }
+  },
+});
+
+/**
  * Download document tool
+ * NOTE: TypeScript-only — Python uses create_share_link instead of direct download.
  */
 export const downloadDocumentTool = (client: FoxitPDFClient) => ({
   name: "download_document",

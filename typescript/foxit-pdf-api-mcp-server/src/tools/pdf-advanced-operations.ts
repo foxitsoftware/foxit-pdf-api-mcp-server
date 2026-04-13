@@ -1,93 +1,70 @@
 import { z } from "zod";
 
 import type { FoxitPDFClient } from "../client";
-import { executeAndWait } from "../utils/task-poller";
 
 // ============ PDF Manipulation Tools ============
 
 export const pdfSplitTool = (client: FoxitPDFClient) => ({
   name: "pdf_split",
-  description: `Split a PDF document into multiple files.
+  description: `Split a PDF document into multiple files by fixed page count.
+- The API requires pageCount (pages per output file).
+- The output is a ZIP document containing the split PDFs.
 
-Split strategies:
-- BY_PAGE_COUNT: Split into chunks of N pages each
-- BY_PAGE_RANGES: Split by specific page ranges
-- EVERY_PAGE: Create one PDF per page
+Example:
+- page_count=10 splits the PDF into files of 10 pages each (last file may have fewer pages).
 
-Configuration:
-- pageCount: Number of pages per chunk (for BY_PAGE_COUNT)
-- pageRanges: Array of ranges like ["1-3", "4-10"] (for BY_PAGE_RANGES)
+Maximum file size: 100MB
 
-Workflow:
-1. Upload PDF using upload_document tool
-2. Call this tool with split strategy
-3. Download result ZIP containing all split PDFs`,
+This operation runs asynchronously. The tool returns a taskId immediately.
+Use get_task_result to poll for completion and retrieve the download link.`,
   parameters: z.object({
     documentId: z.string().describe("Document ID of the PDF to split"),
-    splitStrategy: z
-      .enum(["BY_PAGE_COUNT", "BY_PAGE_RANGES", "EVERY_PAGE"])
-      .describe("Strategy for splitting the PDF"),
     pageCount: z
       .number()
-      .optional()
-      .describe("Pages per chunk (required for BY_PAGE_COUNT)"),
-    pageRanges: z
-      .array(z.string())
-      .optional()
-      .describe('Page ranges (required for BY_PAGE_RANGES, e.g., ["1-3", "4-10"])'),
+      .int()
+      .min(1)
+      .describe("Number of pages per output file (must be >= 1)"),
     password: z.string().optional().describe("Password if PDF is password-protected"),
   }),
-  execute: async (args: {
-    documentId: string;
-    splitStrategy: string;
-    pageCount?: number;
-    pageRanges?: string[];
-    password?: string;
-  }) => {
+  execute: async (args: { documentId: string; pageCount: number; password?: string }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfSplit(
-          args.documentId,
-          args.splitStrategy,
-          { pageCount: args.pageCount, pageRanges: args.pageRanges },
-          args.password
-        )
+      const { taskId } = await client.pdfSplit(
+        args.documentId,
+        "BY_PAGE_COUNT",
+        { pageCount: args.pageCount },
+        args.password
       );
-
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
-        strategy: args.splitStrategy,
-        message: `PDF split successfully. Download ZIP using documentId: ${result.resultDocumentId}`,
+        taskId,
+        message: "PDF split submitted. Use get_task_result to check status and retrieve the download link.",
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "SPLIT_FAILED",
+        errorType: (error as { code?: string }).code ?? "SPLIT_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }
   },
 });
 
+// NOTE: TypeScript-only — Python has separate pdf_extract_pages and pdf_extract_text tools instead.
 export const pdfExtractTool = (client: FoxitPDFClient) => ({
   name: "pdf_extract",
   description: `Extract text, images, or specific pages from a PDF.
+
+NOTE: TypeScript-only tool. The Python server exposes this functionality through
+two separate tools: pdf_extract_pages (for pages) and pdf_extract_text (for text).
 
 Extract types:
 - TEXT: Extract all text content
 - IMAGES: Extract all images
 - PAGES: Extract specific pages
 
-Configuration:
-- pageRanges: Specific pages to extract (e.g., "1-3,5,7-9")
-
-Workflow:
-1. Upload PDF using upload_document tool
-2. Call this tool with extract type and ranges
-3. Download extracted content using download_document tool`,
+This operation runs asynchronously. The tool returns a taskId immediately.
+Use get_task_result to poll for completion and retrieve the download link.`,
   parameters: z.object({
     documentId: z.string().describe("Document ID of the PDF"),
     extractType: z
@@ -106,27 +83,118 @@ Workflow:
     password?: string;
   }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfExtract(
-          args.documentId,
-          args.extractType,
-          { pageRanges: args.pageRanges },
-          args.password
-        )
+      const { taskId } = await client.pdfExtract(
+        args.documentId,
+        args.extractType,
+        { pageRanges: args.pageRanges },
+        args.password
       );
-
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
+        taskId,
         extractType: args.extractType,
-        message: `Content extracted successfully. Download using documentId: ${result.resultDocumentId}`,
+        message: "Content extraction submitted. Use get_task_result to check status and retrieve the download link.",
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "EXTRACT_FAILED",
+        errorType: (error as { code?: string }).code ?? "EXTRACT_FAILED",
+        taskId: (error as { taskId?: string }).taskId,
+      });
+    }
+  },
+});
+
+/**
+ * pdf_extract_pages — mirrors Python's pdf_extract_pages tool.
+ */
+export const pdfExtractPagesTool = (client: FoxitPDFClient) => ({
+  name: "pdf_extract_pages",
+  description: `Extract selected pages into a new PDF document.
+
+Features:
+- Extract any pages or page ranges into a new PDF
+- Preserves page content and formatting
+
+Maximum file size: 100MB
+
+This operation runs asynchronously. The tool returns a taskId immediately.
+Use get_task_result to poll for completion and retrieve the download link.`,
+  parameters: z.object({
+    documentId: z.string().describe("Document ID of the PDF"),
+    page_range: z
+      .string()
+      .describe(
+        'Pages to extract. 1-based page numbers. Supports ranges like "1,3,5-10" and special values "all", "even", "odd".'
+      ),
+    password: z.string().optional().describe("Password if PDF is password-protected"),
+  }),
+  execute: async (args: { documentId: string; page_range: string; password?: string }) => {
+    try {
+      const { taskId } = await client.pdfExtract(
+        args.documentId,
+        "PAGES",
+        { pageRanges: args.page_range },
+        args.password
+      );
+      return JSON.stringify({
+        success: true,
+        taskId,
+        message:
+          "Page extraction submitted. Use get_task_result to check status and retrieve the download link.",
+      });
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        errorType: (error as { code?: string }).code ?? "EXTRACT_FAILED",
+        taskId: (error as { taskId?: string }).taskId,
+      });
+    }
+  },
+});
+
+/**
+ * pdf_extract_text — mirrors Python's pdf_extract_text tool.
+ */
+export const pdfExtractTextTool = (client: FoxitPDFClient) => ({
+  name: "pdf_extract_text",
+  description: `Extract plain text content from selected pages.
+- Returns plain text and a generated .txt document.
+- page_range controls which pages are processed (1-based) and also supports "all", "even", "odd".
+
+This operation runs asynchronously. The tool returns a taskId immediately.
+Use get_task_result to poll for completion and retrieve the result.
+When complete, the result includes a download link for the .txt file.`,
+  parameters: z.object({
+    documentId: z.string().describe("Document ID of the PDF"),
+    page_range: z
+      .string()
+      .describe(
+        'Pages to extract text from. 1-based. Supports "1,3,5-10", "all", "even", "odd".'
+      ),
+    password: z.string().optional().describe("Password if PDF is password-protected"),
+  }),
+  execute: async (args: { documentId: string; page_range: string; password?: string }) => {
+    try {
+      const { taskId } = await client.pdfExtract(
+        args.documentId,
+        "TEXT",
+        { pageRanges: args.page_range },
+        args.password
+      );
+      return JSON.stringify({
+        success: true,
+        taskId,
+        message:
+          "Text extraction submitted. Use get_task_result to check status and retrieve the extracted text.",
+      });
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        errorType: (error as { code?: string }).code ?? "EXTRACT_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }
@@ -135,44 +203,39 @@ Workflow:
 
 export const pdfFlattenTool = (client: FoxitPDFClient) => ({
   name: "pdf_flatten",
-  description: `Flatten form fields and annotations in a PDF.
+  description: `Flatten a PDF document (merge all layers and form fields).
 
-This operation converts interactive elements to static content:
-- Form fields become non-editable text
-- Annotations become part of the page
-- Comments are merged into the document
+Features:
+- Converts form fields to static content
+- Flattens annotations and markup
+- Merges all layers
+- Prevents further editing of forms
 
 Use cases:
-- Finalize forms before distribution
-- Create non-editable copies
-- Prepare for archiving
-- Prevent further modifications
+- Finalize forms before archiving
+- Prevent form tampering
+- Reduce file complexity
 
-Workflow:
-1. Upload PDF using upload_document tool
-2. Call this tool
-3. Download flattened PDF using download_document tool`,
+This operation runs asynchronously. The tool returns a taskId immediately.
+Use get_task_result to poll for completion and retrieve the download link.`,
   parameters: z.object({
     documentId: z.string().describe("Document ID of the PDF to flatten"),
     password: z.string().optional().describe("Password if PDF is password-protected"),
   }),
   execute: async (args: { documentId: string; password?: string }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfFlatten(args.documentId, args.password)
-      );
-
+      const { taskId } = await client.pdfFlatten(args.documentId, args.password);
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
-        message: `PDF flattened successfully. Download using documentId: ${result.resultDocumentId}`,
+        taskId,
+        message:
+          "PDF flatten submitted. Use get_task_result to check status and retrieve the download link.",
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "FLATTEN_FAILED",
+        errorType: (error as { code?: string }).code ?? "FLATTEN_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }
@@ -181,57 +244,36 @@ Workflow:
 
 export const pdfCompressTool = (client: FoxitPDFClient) => ({
   name: "pdf_compress",
-  description: `Compress PDF file size by optimizing images and removing redundant data.
+  description: `Compress a PDF document to reduce file size.
 
-Compression levels:
-- HIGH: Maximum compression, some quality loss
-- MEDIUM: Balanced compression and quality
-- LOW: Light compression, maximum quality
+Do not offer compression level options. Only one default compression level is currently supported.
 
 Features:
-- Image resolution reduction
-- Removes duplicate resources
-- Optimizes font embedding
-- Removes unused objects
+- Attempts to reduce file size; compression ratio and quality impact vary by document
+- Optimizes embedded resources (e.g., images) and removes redundant data where possible
 
-Typical compression ratios:
-- HIGH: 60-80% size reduction
-- MEDIUM: 40-60% size reduction
-- LOW: 20-40% size reduction
+Maximum file size: 100MB
 
-Workflow:
-1. Upload PDF using upload_document tool
-2. Call this tool with compression level
-3. Download compressed PDF using download_document tool`,
+This operation runs asynchronously. The tool returns a taskId immediately.
+Use get_task_result to poll for completion and retrieve the download link.`,
   parameters: z.object({
     documentId: z.string().describe("Document ID of the PDF to compress"),
-    compressionLevel: z
-      .enum(["HIGH", "MEDIUM", "LOW"])
-      .describe("Compression level"),
     password: z.string().optional().describe("Password if PDF is password-protected"),
   }),
-  execute: async (args: {
-    documentId: string;
-    compressionLevel: string;
-    password?: string;
-  }) => {
+  execute: async (args: { documentId: string; password?: string }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfCompress(args.documentId, args.compressionLevel, args.password)
-      );
-
+      const { taskId } = await client.pdfCompress(args.documentId, undefined, args.password);
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
-        compressionLevel: args.compressionLevel,
-        message: `PDF compressed successfully. Download using documentId: ${result.resultDocumentId}`,
+        taskId,
+        message:
+          "PDF compression submitted. Use get_task_result to check status and retrieve the download link.",
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "COMPRESS_FAILED",
+        errorType: (error as { code?: string }).code ?? "COMPRESS_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }
@@ -240,45 +282,29 @@ Workflow:
 
 export const pdfManipulateTool = (client: FoxitPDFClient) => ({
   name: "pdf_manipulate",
-  description: `Reorganize, rotate, or delete pages in a PDF.
+  description: `Apply a batch of page operations to a PDF (rotate, delete, or reorder pages).
 
 Operations:
-- ROTATE: Rotate a page (90, 180, or 270 degrees)
-- DELETE: Remove a page
-- REORDER: Move a page to a different position
-
-Each operation requires:
-- type: Operation type
-- pageIndex: Target page (0-based index)
-- rotation: Rotation angle (for ROTATE)
-- targetIndex: New position (for REORDER)
+- ROTATE: Rotate a page (90, 180, or 270 degrees). pageIndex is 0-based.
+- DELETE: Remove a page. pageIndex is 0-based.
+- REORDER: Move a page to a different position. pageIndex and targetIndex are 0-based.
 
 Example operations:
-- Rotate page 1 by 90°: {type: "ROTATE", pageIndex: 0, rotation: 90}
-- Delete page 3: {type: "DELETE", pageIndex: 2}
-- Move page 5 to position 2: {type: "REORDER", pageIndex: 4, targetIndex: 1}
+- Rotate page 1 by 90°: { type: "ROTATE", pageIndex: 0, rotation: 90 }
+- Delete page 3: { type: "DELETE", pageIndex: 2 }
+- Move page 5 to position 2: { type: "REORDER", pageIndex: 4, targetIndex: 1 }
 
-Workflow:
-1. Upload PDF using upload_document tool
-2. Call this tool with array of operations
-3. Download modified PDF using download_document tool`,
+This operation runs asynchronously. The tool returns a taskId immediately.
+Use get_task_result to poll for completion and retrieve the download link.`,
   parameters: z.object({
     documentId: z.string().describe("Document ID of the PDF to manipulate"),
     operations: z
       .array(
         z.object({
-          type: z
-            .enum(["ROTATE", "DELETE", "REORDER"])
-            .describe("Type of operation"),
+          type: z.enum(["ROTATE", "DELETE", "REORDER"]).describe("Type of operation"),
           pageIndex: z.number().describe("Target page index (0-based)"),
-          rotation: z
-            .number()
-            .optional()
-            .describe("Rotation angle in degrees (for ROTATE)"),
-          targetIndex: z
-            .number()
-            .optional()
-            .describe("New position index (for REORDER)"),
+          rotation: z.number().optional().describe("Rotation angle in degrees (for ROTATE)"),
+          targetIndex: z.number().optional().describe("New position index (for REORDER)"),
         })
       )
       .describe("Array of page manipulation operations"),
@@ -295,22 +321,166 @@ Workflow:
     password?: string;
   }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfManipulate(args.documentId, args.operations, args.password)
+      const { taskId } = await client.pdfManipulate(
+        args.documentId,
+        args.operations,
+        args.password
       );
-
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
-        operationsCount: args.operations.length,
-        message: `PDF manipulated successfully with ${args.operations.length} operations. Download using documentId: ${result.resultDocumentId}`,
+        taskId,
+        message: `PDF manipulation (${args.operations.length} operations) submitted. Use get_task_result to check status and retrieve the download link.`,
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "MANIPULATE_FAILED",
+        errorType: (error as { code?: string }).code ?? "MANIPULATE_FAILED",
+        taskId: (error as { taskId?: string }).taskId,
+      });
+    }
+  },
+});
+
+/**
+ * pdf_delete_pages — mirrors Python's pdf_delete_pages tool.
+ * Convenience wrapper over pdf_manipulate for the DELETE operation.
+ */
+export const pdfDeletePagesTool = (client: FoxitPDFClient) => ({
+  name: "pdf_delete_pages",
+  description: `Delete specific pages from a PDF document.
+
+Uses 1-based page numbers. Supports ranges like "1,3,5-10".
+
+This operation runs asynchronously. The tool returns a taskId immediately.
+Use get_task_result to poll for completion and retrieve the download link.`,
+  parameters: z.object({
+    documentId: z.string().describe("Document ID of the PDF"),
+    page_range: z
+      .string()
+      .describe('Pages to delete. 1-based. Examples: "1,3,5-10", "2-4".'),
+    password: z.string().optional().describe("Password if PDF is password-protected"),
+  }),
+  execute: async (args: { documentId: string; page_range: string; password?: string }) => {
+    try {
+      const pageNumbers = expandPageRange(args.page_range);
+      // Delete from end first so earlier indices remain valid
+      const operations = pageNumbers
+        .sort((a, b) => b - a)
+        .map((p) => ({ type: "DELETE" as const, pageIndex: p - 1 }));
+
+      const { taskId } = await client.pdfManipulate(args.documentId, operations, args.password);
+      return JSON.stringify({
+        success: true,
+        taskId,
+        message:
+          "Page deletion submitted. Use get_task_result to check status and retrieve the download link.",
+      });
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        errorType: (error as { code?: string }).code ?? "MANIPULATE_FAILED",
+        taskId: (error as { taskId?: string }).taskId,
+      });
+    }
+  },
+});
+
+/**
+ * pdf_rotate_pages — mirrors Python's pdf_rotate_pages tool.
+ */
+export const pdfRotatePagesTool = (client: FoxitPDFClient) => ({
+  name: "pdf_rotate_pages",
+  description: `Rotate specific pages in a PDF document.
+
+Uses 1-based page numbers. Supports ranges like "1,3,5-10".
+Rotation must be 90, 180, or 270 degrees.
+
+This operation runs asynchronously. The tool returns a taskId immediately.
+Use get_task_result to poll for completion and retrieve the download link.`,
+  parameters: z.object({
+    documentId: z.string().describe("Document ID of the PDF"),
+    page_range: z
+      .string()
+      .describe('Pages to rotate. 1-based. Examples: "1,3,5-10", "2-4".'),
+    rotation: z
+      .number()
+      .refine((v) => [90, 180, 270].includes(v), { message: "Rotation must be 90, 180, or 270" })
+      .describe("Rotation angle in degrees (90, 180, or 270)"),
+    password: z.string().optional().describe("Password if PDF is password-protected"),
+  }),
+  execute: async (args: {
+    documentId: string;
+    page_range: string;
+    rotation: number;
+    password?: string;
+  }) => {
+    try {
+      const pageNumbers = expandPageRange(args.page_range);
+      const operations = pageNumbers.map((p) => ({
+        type: "ROTATE" as const,
+        pageIndex: p - 1,
+        rotation: args.rotation,
+      }));
+
+      const { taskId } = await client.pdfManipulate(args.documentId, operations, args.password);
+      return JSON.stringify({
+        success: true,
+        taskId,
+        message:
+          "Page rotation submitted. Use get_task_result to check status and retrieve the download link.",
+      });
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        errorType: (error as { code?: string }).code ?? "MANIPULATE_FAILED",
+        taskId: (error as { taskId?: string }).taskId,
+      });
+    }
+  },
+});
+
+/**
+ * pdf_reorder_pages — mirrors Python's pdf_reorder_pages tool.
+ */
+export const pdfReorderPagesTool = (client: FoxitPDFClient) => ({
+  name: "pdf_reorder_pages",
+  description: `Reorder pages in a PDF document by providing the new page order.
+
+Provide a list of 1-based page numbers in the desired order.
+Example: new_order=[3,1,2] moves page 3 to position 1, then page 1 to position 2, etc.
+
+This operation runs asynchronously. The tool returns a taskId immediately.
+Use get_task_result to poll for completion and retrieve the download link.`,
+  parameters: z.object({
+    documentId: z.string().describe("Document ID of the PDF"),
+    new_order: z
+      .array(z.number().int().min(1))
+      .describe("New page order as an array of 1-based page numbers (must include all pages)"),
+    password: z.string().optional().describe("Password if PDF is password-protected"),
+  }),
+  execute: async (args: { documentId: string; new_order: number[]; password?: string }) => {
+    try {
+      const operations = args.new_order.map((pageNum, targetIdx) => ({
+        type: "REORDER" as const,
+        pageIndex: pageNum - 1,
+        targetIndex: targetIdx,
+      }));
+
+      const { taskId } = await client.pdfManipulate(args.documentId, operations, args.password);
+      return JSON.stringify({
+        success: true,
+        taskId,
+        message:
+          "Page reorder submitted. Use get_task_result to check status and retrieve the download link.",
+      });
+    } catch (error) {
+      return JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        errorType: (error as { code?: string }).code ?? "MANIPULATE_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }
@@ -323,43 +493,33 @@ export const pdfRemovePasswordTool = (client: FoxitPDFClient) => ({
   name: "pdf_remove_password",
   description: `Remove password protection from a PDF document.
 
-Requires the current password to remove protection.
-
-This will remove:
-- User password (open password)
-- Owner password (permissions password)
-- All permission restrictions
+Requirements:
+- You must provide the correct password (user or owner)
+- Only works if you know the password
 
 Use cases:
-- Remove protection after authorization
-- Prepare PDF for further processing
-- Enable full access to content
+- Remove restrictions from your own PDFs
+- Unlock PDFs for processing
+- Prepare PDFs for archiving
 
-Workflow:
-1. Upload password-protected PDF using upload_document tool
-2. Call this tool with current password
-3. Download unprotected PDF using download_document tool`,
+Maximum file size: 100MB`,
   parameters: z.object({
-    documentId: z.string().describe("Document ID of the protected PDF"),
-    password: z.string().describe("Current password of the PDF"),
+    documentId: z.string().describe("Document ID of the password-protected PDF"),
+    password: z.string().describe("The user or owner password for the PDF"),
   }),
   execute: async (args: { documentId: string; password: string }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfRemovePassword(args.documentId, args.password)
-      );
-
+      const result = await client.pdfRemovePassword(args.documentId, args.password);
       return JSON.stringify({
         success: true,
         taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
-        message: `Password removed successfully. Download using documentId: ${result.resultDocumentId}`,
+        message: "Password removal submitted. Use get_task_result to check status.",
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "REMOVE_PASSWORD_FAILED",
+        errorType: (error as { code?: string }).code ?? "REMOVE_PASSWORD_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }
@@ -368,9 +528,12 @@ Workflow:
 
 // ============ Enhancement Tools ============
 
+// NOTE: TypeScript-only — Python has this tool commented out (planned, not yet enabled).
 export const pdfWatermarkTool = (client: FoxitPDFClient) => ({
   name: "pdf_watermark",
   description: `Add text or image watermark to PDF pages.
+
+NOTE: TypeScript-only tool. This tool is planned but not yet enabled in the Python server.
 
 Watermark types:
 - TEXT: Text watermark (default)
@@ -380,22 +543,13 @@ Configuration:
 - content: Watermark text or image documentId
 - position: Placement (CENTER, TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT)
 - opacity: Transparency (0.0-1.0, default: 0.5)
-- rotation: Rotation angle in degrees (default: 0)
+- rotation: Rotation angle in degrees
 - fontSize: Text size in points (for TEXT type)
-- color: Text color in hex format (e.g., "#FF0000" for red)
-- pageRanges: Specific pages (e.g., "1-3,5,7-9", default: all pages)
+- color: Text color in hex (e.g., "#FF0000")
+- pageRanges: Specific pages (e.g., "1-3,5", default: all pages)
 
-Use cases:
-- Add "DRAFT" or "CONFIDENTIAL" stamps
-- Add company logos
-- Copyright protection
-- Document tracking
-
-Workflow:
-1. Upload PDF using upload_document tool
-2. (Optional) Upload watermark image for IMAGE type
-3. Call this tool with watermark configuration
-4. Download watermarked PDF using download_document tool`,
+This operation runs asynchronously. The tool returns a taskId immediately.
+Use get_task_result to poll for completion and retrieve the download link.`,
   parameters: z.object({
     documentId: z.string().describe("Document ID of the PDF"),
     content: z.string().describe("Watermark text or image documentId"),
@@ -435,34 +589,31 @@ Workflow:
     password?: string;
   }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfWatermark(
-          args.documentId,
-          {
-            content: args.content,
-            type: args.type,
-            position: args.position,
-            opacity: args.opacity,
-            rotation: args.rotation,
-            fontSize: args.fontSize,
-            color: args.color,
-            pageRanges: args.pageRanges,
-          },
-          args.password
-        )
+      const { taskId } = await client.pdfWatermark(
+        args.documentId,
+        {
+          content: args.content,
+          type: args.type,
+          position: args.position,
+          opacity: args.opacity,
+          rotation: args.rotation,
+          fontSize: args.fontSize,
+          color: args.color,
+          pageRanges: args.pageRanges,
+        },
+        args.password
       );
-
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
-        message: `Watermark added successfully. Download using documentId: ${result.resultDocumentId}`,
+        taskId,
+        message:
+          "Watermark submitted. Use get_task_result to check status and retrieve the download link.",
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "WATERMARK_FAILED",
+        errorType: (error as { code?: string }).code ?? "WATERMARK_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }
@@ -471,54 +622,58 @@ Workflow:
 
 export const pdfLinearizeTool = (client: FoxitPDFClient) => ({
   name: "pdf_linearize",
-  description: `Optimize PDF for fast web viewing (linearization).
+  description: `Optimize PDF for fast web viewing (Fast Web View / linearization).
 
-Linearization reorganizes PDF structure for:
-- Page-at-a-time downloading
-- Faster initial page display
-- Better streaming performance
-- Improved web browser experience
-
-Also called "Fast Web View" or "Optimized for Web".
-
-Benefits:
-- First page displays before full download
-- Reduced initial loading time
-- Better user experience for large PDFs
-- No quality loss
+Linearization reorganizes the PDF so the first page renders before the full file downloads.
 
 Use cases:
 - PDFs for web hosting
 - Online document viewers
 - Large documents for distribution
-- E-commerce catalogs
 
-Workflow:
-1. Upload PDF using upload_document tool
-2. Call this tool
-3. Download linearized PDF using download_document tool`,
+This operation runs asynchronously. The tool returns a taskId immediately.
+Use get_task_result to poll for completion and retrieve the download link.`,
   parameters: z.object({
     documentId: z.string().describe("Document ID of the PDF to linearize"),
+    password: z.string().optional().describe("Password if PDF is password-protected"),
   }),
-  execute: async (args: { documentId: string }) => {
+  execute: async (args: { documentId: string; password?: string }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfLinearize(args.documentId)
-      );
-
+      const { taskId } = await client.pdfLinearize(args.documentId);
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
-        message: `PDF linearized successfully. Download using documentId: ${result.resultDocumentId}`,
+        taskId,
+        message:
+          "PDF linearization submitted. Use get_task_result to check status and retrieve the download link.",
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "LINEARIZE_FAILED",
+        errorType: (error as { code?: string }).code ?? "LINEARIZE_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }
   },
 });
+
+// ============ Helper ============
+
+/**
+ * Expand a page range string (e.g., "1,3,5-10") into an array of 1-based page numbers.
+ */
+function expandPageRange(range: string): number[] {
+  const pages = new Set<number>();
+  for (const part of range.split(",")) {
+    const dashMatch = part.trim().match(/^(\d+)-(\d+)$/);
+    if (dashMatch) {
+      const start = parseInt(dashMatch[1], 10);
+      const end = parseInt(dashMatch[2], 10);
+      for (let i = start; i <= end; i++) pages.add(i);
+    } else {
+      const num = parseInt(part.trim(), 10);
+      if (!isNaN(num)) pages.add(num);
+    }
+  }
+  return Array.from(pages);
+}

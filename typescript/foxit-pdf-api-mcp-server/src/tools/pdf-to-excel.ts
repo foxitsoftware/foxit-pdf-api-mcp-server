@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import type { FoxitPDFClient } from "../client";
-import { executeAndWait } from "../utils/task-poller";
 
 export const pdfToExcelTool = (client: FoxitPDFClient) => ({
   name: "pdf_to_excel",
@@ -31,21 +30,17 @@ Workflow:
   }),
   execute: async (args: { documentId: string; password?: string }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfToExcel(args.documentId, args.password)
-      );
-
+      const { taskId } = await client.pdfToExcel(args.documentId, args.password);
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
-        message: `PDF converted to Excel successfully. Download using documentId: ${result.resultDocumentId}`,
+        taskId,
+        message: "PDF to Excel conversion submitted. Use get_task_result to check status and retrieve the download link.",
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "CONVERSION_FAILED",
+        errorType: (error as { code?: string }).code ?? "CONVERSION_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }

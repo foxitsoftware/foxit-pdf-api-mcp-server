@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import type { FoxitPDFClient } from "../client";
-import { executeAndWait } from "../utils/task-poller";
 
 export const pdfFromImageTool = (client: FoxitPDFClient) => ({
   name: "pdf_from_image",
@@ -37,7 +36,7 @@ Common use cases:
 Workflow:
 1. Upload image file(s) using upload_document tool
 2. Call this tool with the documentId
-3. Download result using download_document tool`,
+3. Use get_task_result to poll for completion and retrieve the download link`,
   parameters: z.object({
     documentId: z
       .string()
@@ -45,21 +44,17 @@ Workflow:
   }),
   execute: async (args: { documentId: string }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfFromImage(args.documentId)
-      );
-
+      const { taskId } = await client.pdfFromImage(args.documentId);
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
-        message: `Image(s) converted to PDF successfully. Download using documentId: ${result.resultDocumentId}`,
+        taskId,
+        message: "Image to PDF conversion submitted. Use get_task_result to check status and retrieve the download link.",
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "CONVERSION_FAILED",
+        errorType: (error as { code?: string }).code ?? "CONVERSION_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }

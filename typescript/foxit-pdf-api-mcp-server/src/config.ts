@@ -1,3 +1,7 @@
+// load environment variables from .env file
+import dotenv from "dotenv";
+dotenv.config();
+
 // Configuration from environment variables
 const DEFAULT_API_BASE_URL = "https://na1.fusion.foxit.com/pdf-services";
 let API_BASE_URL =
