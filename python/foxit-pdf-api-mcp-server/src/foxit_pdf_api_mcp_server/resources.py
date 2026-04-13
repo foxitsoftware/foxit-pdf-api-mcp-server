@@ -81,9 +81,9 @@ class Widget:
 
 
 def _load_widget_html(component_name: str) -> str:
-    """Load widget HTML from the web/dist directory."""
+    """Load widget HTML from the shared/ui/dist directory."""
     current_dir = Path(__file__).resolve().parent
-    web_dist_dir = current_dir.parent.parent / "web" / "dist"
+    web_dist_dir = current_dir.parent.parent.parent.parent / "shared" / "ui" / "dist"
 
     widget_html_path = web_dist_dir / f"{component_name}.html"
     if not widget_html_path.exists():

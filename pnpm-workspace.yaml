@@ -1,0 +1,3 @@
+packages:
+  - 'shared/ui'
+  - 'typescript/foxit-pdf-api-mcp-server'
