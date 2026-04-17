@@ -2,15 +2,10 @@
   "name": "foxit-pdf-mcp-server-root",
   "private": true,
   "scripts": {
-    "build:ui": "cd shared/ui && pnpm build",
-    "validate": "tsx scripts/validate-manifest.ts",
-    "sync-docs": "tsx scripts/sync-descriptions.ts",
-    "parity": "tsx scripts/check-parity.ts"
+    "build:ui": "npm run build --prefix shared/ui"
   },
   "devDependencies": {
-    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",
-    "js-yaml": "^4.1.0",
     "tsx": "^4.19.4"
   }
 }

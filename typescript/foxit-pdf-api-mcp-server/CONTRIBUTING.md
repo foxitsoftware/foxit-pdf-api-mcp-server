@@ -7,7 +7,7 @@ Thank you for your interest in contributing! This document provides guidelines a
 ### Prerequisites
 
 - Node.js 18 or higher
-- pnpm package manager
+- npm (bundled with Node.js) or pnpm
 - Git
 
 ### Installation
@@ -15,9 +15,12 @@ Thank you for your interest in contributing! This document provides guidelines a
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd foxit-pdf-api-mcp-server
+cd foxit-pdf-api-mcp-server/typescript/foxit-pdf-api-mcp-server
 
-# Install dependencies
+# Install dependencies (npm)
+npm install
+
+# Install dependencies (pnpm)
 pnpm install
 
 # Set up environment variables
@@ -29,23 +32,37 @@ cp .env.example .env
 
 ```bash
 # Build the project
-pnpm build
+npm run build       # or: pnpm build
 
 # Run in development mode (with auto-reload)
-pnpm dev
+npm run dev         # or: pnpm dev
 
 # Lint code
-pnpm lint
+npm run lint        # or: pnpm lint
 
 # Format code
-pnpm format
+npm run format      # or: pnpm format
 
 # Run tests
-pnpm test
+npm test            # or: pnpm test
 
 # Type checking
-pnpm type-check
+npm run type-check  # or: pnpm type-check
 ```
+
+### Building the MCP App UI
+
+The PDF widget tools (`show_pdf_tools`, `show_pdf_viewer`) require the shared UI to be built first. From the **repository root**:
+
+```bash
+# npm
+npm run build:ui
+
+# pnpm
+pnpm run build:ui
+```
+
+See [`shared/ui/README.md`](../../shared/ui/README.md) for details.
 
 ## Architecture
 
@@ -57,14 +74,16 @@ src/
 │   ├── foxit-pdf-client.ts   # Core API client
 │   └── index.ts
 ├── tools/               # MCP tool definitions (one file per tool/category)
-│   ├── document-lifecycle.ts
+│   ├── document-lifecycle.ts  # upload, download, delete, create_share_link
+│   ├── task-status.ts         # get_task_result
 │   ├── pdf-from-word.ts
 │   ├── pdf-to-word.ts
 │   ├── pdf-merge.ts
 │   ├── pdf-protect.ts
 │   ├── get-pdf-properties.ts
-│   ├── pdf-advanced-operations.ts
-│   ├── pdf-analysis-forms.ts
+│   ├── pdf-advanced-operations.ts  # split, extract, flatten, compress, manipulate, page ops
+│   ├── pdf-analysis-forms.ts       # compare, ocr, structural analysis, form tools
+│   ├── pdf-widget.ts              # show_pdf_tools, show_pdf_viewer (MCP App widgets)
 │   └── index.ts
 ├── types/               # TypeScript type definitions
 │   └── api.ts

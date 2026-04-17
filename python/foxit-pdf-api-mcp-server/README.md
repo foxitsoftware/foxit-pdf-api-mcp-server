@@ -113,6 +113,45 @@ The agent will:
 1. Use the `download_document` tool
 2. Save the file to the specified path
 
+## MCP App Widgets
+
+This server includes two interactive MCP App widgets that render inside a supported agent UI (e.g., VS Code with Copilot, Claude Desktop with MCP Apps support).
+
+| Tool | Widget | Description |
+|---|---|---|
+| `show_pdf_tools` | PDF Tools | File upload panel + control panel for PDF operations |
+| `show_pdf_viewer` | PDF Viewer | Inline PDF viewer for reviewing results |
+
+### Building the Widgets
+
+The widgets live in [`shared/ui/`](../../shared/ui) at the repository root. You must build them before the widget tools will work. Node.js 18+ is required.
+
+**With npm:**
+
+```bash
+# From the repo root:
+npm run build:ui
+
+# Or directly:
+cd shared/ui
+npm install
+npm run build
+```
+
+**With pnpm:**
+
+```bash
+# From the repo root:
+pnpm run build:ui
+
+# Or directly:
+cd shared/ui
+pnpm install
+pnpm build
+```
+
+Once built, `shared/ui/dist/index.html` and `shared/ui/dist/viewer.html` are loaded automatically by the server at startup.
+
 ## Development
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development setup, workflow, and contribution guidelines.
