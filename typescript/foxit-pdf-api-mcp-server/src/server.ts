@@ -30,6 +30,7 @@ import {
   pdfMergeTool,
   pdfOcrTool,
   pdfProtectTool,
+  pdfRedactTool,
   pdfRemovePasswordTool,
   pdfReorderPagesTool,
   pdfRotatePagesTool,
@@ -114,6 +115,7 @@ server.addTool(pdfRotatePagesTool(foxitClient));
 server.addTool(pdfReorderPagesTool(foxitClient));
 server.addTool(pdfMergeTool(foxitClient));
 server.addTool(pdfProtectTool(foxitClient));
+server.addTool(pdfRedactTool(foxitClient));
 server.addTool(pdfRemovePasswordTool(foxitClient));
 server.addTool(pdfWatermarkTool(foxitClient));
 server.addTool(pdfLinearizeTool(foxitClient));

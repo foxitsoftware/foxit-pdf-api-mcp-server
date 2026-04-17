@@ -426,6 +426,52 @@ export class FoxitPDFClient {
     });
   }
 
+  /**
+   * Redact sensitive content from a PDF
+   */
+  async pdfRedact(
+    documentId: string,
+    config: {
+      texts?: string[];
+      overlayText?: string;
+      pageRange?: string;
+      caseSensitive?: boolean;
+      wholeWordsOnly?: boolean;
+      redactFormFields?: boolean;
+      formFieldTypes?: string[];
+      applyImmediately?: boolean;
+    }
+  ): Promise<OperationResponse> {
+    const apiConfig: Record<string, unknown> = {};
+
+    if (config.texts?.length) {
+      apiConfig.redactTextList = config.texts.map((text) => ({
+        text,
+        ...(config.overlayText ? { overlayText: config.overlayText } : {}),
+      }));
+      const searchOptions: Record<string, unknown> = {};
+      if (config.caseSensitive) searchOptions.caseSensitive = true;
+      if (config.wholeWordsOnly) searchOptions.wholeWordsOnly = true;
+      if (config.pageRange) searchOptions.pageRange = config.pageRange;
+      if (Object.keys(searchOptions).length) apiConfig.textSearchOptions = searchOptions;
+    }
+
+    if (config.redactFormFields) {
+      apiConfig.formFieldRedact = config.formFieldTypes?.length
+        ? { fieldTypes: config.formFieldTypes }
+        : {};
+    }
+
+    if (config.applyImmediately === false) {
+      apiConfig.applyImmediately = false;
+    }
+
+    return this.submitOperation("/api/documents/security/pdf-redact", {
+      documentId,
+      config: apiConfig,
+    });
+  }
+
   // ============ Enhancement Tools ============
 
   /**

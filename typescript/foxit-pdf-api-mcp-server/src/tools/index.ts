@@ -21,6 +21,7 @@ export * from "./pdf-conversions"; // pdfToPpt, pdfToHtml, pdfToText, pdfToImage
 // PDF management tools
 export * from "./pdf-merge";
 export * from "./pdf-protect";
+export * from "./pdf-redact";
 export * from "./get-pdf-properties";
 
 // PDF advanced operations (manipulation, security, enhancement)
