@@ -31,6 +31,9 @@ from .tools import pdf_properties  # noqa: E402, F401
 # # PDF analysis tools
 from .tools import pdf_analysis  # noqa: E402, F401
 
+# PDF security tools
+from .tools import pdf_security  # noqa: E402, F401
+
 # PDF forms tools
 # from .tools import pdf_forms  # noqa: E402, F401
 

@@ -196,20 +196,10 @@ async def pdf_redact(
     """
     ⚠️ CRITICAL PREREQUISITE: You MUST call show_pdf_tools first to display the upload widget.
     The document_id parameter comes from the upload response in the widget.
+    When user want to redact PDF, ask them to provide specific texts or form fields to redact, using natvie UI if possible.
+    Provide an exact text list to search and redact. Do NOT be too vague, e.g. "redact personal info" without specifying what that is.
 
-    Permanently redact sensitive content from a PDF document.
-
-    Supports two modes (can be combined):
-    - Text-based: find and permanently remove specific words or phrases
-    - Form-field: redact the content of form fields
-
-    ⚠️ When apply_immediately is True (default), redactions are PERMANENT and IRREVERSIBLE.
-    Set apply_immediately=False to preview marks without removing the underlying content.
-
-    Maximum file size: 100MB
-
-    This operation runs asynchronously. The tool returns a taskId immediately.
-    Use get_task_result to poll for completion and retrieve the download link.
+    Permanently redact sensitive content from a PDF document by matching specified texts or form fields.
 
     Args:
         document_id: Document ID of the PDF to redact
