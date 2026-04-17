@@ -13,3 +13,6 @@ yarn-error.log*
 
 # Shared UI build artifacts
 shared/ui/dist/
+
+# 
+.github/skills
