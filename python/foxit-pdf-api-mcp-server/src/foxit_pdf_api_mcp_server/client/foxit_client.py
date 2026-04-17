@@ -877,6 +877,21 @@ class FoxitPDFClient:
         data = await self._handle_response(response)
         return OperationResponse(taskId=data["taskId"])
 
+    async def pdf_redact(
+        self, document_id: str, config: dict[str, Any]
+    ) -> OperationResponse:
+        """Redact content from a PDF."""
+        payload: dict[str, Any] = {"documentId": document_id}
+        if config:
+            payload["config"] = config
+        response = await self._make_request(
+            "POST",
+            "/api/documents/security/pdf-redact",
+            json=payload,
+        )
+        data = await self._handle_response(response)
+        return OperationResponse(taskId=data["taskId"])
+
     # PDF Enhancement operations
 
     async def pdf_watermark(
