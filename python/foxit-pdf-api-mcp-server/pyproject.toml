@@ -27,7 +27,7 @@ dependencies = [
 ]
 
 [project.scripts]
-foxit-pdf-api-mcp-server = "foxit_pdf_api_mcp.main:main"
+foxit-pdf-api-mcp-server = "foxit_pdf_api_mcp_server.main:main"
 
 [project.urls]
 Homepage = "https://developer-api.foxit.com"
