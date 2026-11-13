@@ -72,18 +72,25 @@ foxit-pdf-api-mcp-server --transport httpStream --port 8080
 
 | Option                            | Description                               | Default   |
 | --------------------------------- | ----------------------------------------- | --------- |
-| `--transport <stdio\|httpStream>` | Transport type                            | `stdio`   |
-| `--host <host>`                   | HTTP stream bind address                  | `0.0.0.0` |
-| `--port <port>`                   | HTTP stream port                          | `8080`    |
-| `--endpoint <path>`               | HTTP stream endpoint path                 | `/mcp`    |
-| `--stateless`                     | Enable stateless HTTP stream mode         | `false`   |
-| `--enable-json-response`          | Enable JSON response mode for HTTP stream | `false`   |
-| `--ssl-cert <path>`               | Path to SSL certificate                   | —         |
-| `--ssl-key <path>`                | Path to SSL private key                   | —         |
-| `--ssl-ca <path>`                 | Path to SSL CA bundle                     | —         |
-| `-h, --help`                      | Show help                                 | —         |
+| `--transport <stdio\|httpStream>` | Transport type                            | `stdio`     |
+| `--host <host>`                   | HTTP stream bind address                  | `127.0.0.1` |
+| `--port <port>`                   | HTTP stream port                          | `8080`      |
+| `--endpoint <path>`               | HTTP stream endpoint path                 | `/mcp`      |
+| `--stateless`                     | Enable stateless HTTP stream mode         | `false`     |
+| `--enable-json-response`          | Enable JSON response mode for HTTP stream | `false`     |
+| `--auth-token <token>`            | Bearer token required for HTTP requests   | —           |
+| `--ssl-cert <path>`               | Path to SSL certificate                   | —           |
+| `--ssl-key <path>`                | Path to SSL private key                   | —           |
+| `--ssl-ca <path>`                 | Path to SSL CA bundle                     | —           |
+| `-h, --help`                      | Show help                                 | —           |
 
 **HTTP stream env var defaults:** `SERVER_HOST` and `SERVER_PORT` override the built-in defaults for `--host` and `--port`.
+
+**Security:** The HTTP transport binds to loopback (`127.0.0.1`) by default. Binding to a
+non-loopback host (e.g. `--host 0.0.0.0`) **requires** an auth token (`--auth-token` or
+`MCP_AUTH_TOKEN`); the server refuses to start otherwise. `upload_document` /
+`download_document` are confined to `MCP_FS_ALLOWED_DIRS` (default
+`~/Downloads:~/Desktop:~/Documents:<tmp>`).
 
 Run `npx @foxitsoftware/foxit-pdf-api-mcp-server --help` to see all options.
 

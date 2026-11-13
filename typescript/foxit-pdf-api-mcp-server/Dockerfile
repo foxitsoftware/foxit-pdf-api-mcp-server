@@ -38,6 +38,10 @@ COPY --from=builder /app/dist ./dist
 # Set environment variables
 ENV NODE_ENV=production
 ENV SERVER_PORT=8080
+# Bind all interfaces inside the container; a bearer token (MCP_AUTH_TOKEN) is
+# REQUIRED when exposing a non-loopback host, so the container refuses to start
+# without it. Supply it at runtime, e.g.: docker run -e MCP_AUTH_TOKEN=...
+ENV SERVER_HOST=0.0.0.0
 
 # Expose the port
 EXPOSE 8080

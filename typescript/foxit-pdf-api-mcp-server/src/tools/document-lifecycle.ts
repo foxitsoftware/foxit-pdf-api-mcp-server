@@ -2,6 +2,11 @@ import { readFile } from "fs/promises";
 import { z } from "zod";
 
 import type { FoxitPDFClient } from "../client";
+import {
+  fileUriToPath,
+  validateReadPath,
+  validateSavePath,
+} from "../utils/path-guard";
 
 /**
  * Upload document tool
@@ -77,9 +82,19 @@ Usage: Always call this tool first before performing any PDF operations.`,
           // Extract filename from URI
           actualFileName = args.fileName || (args.resourceUri.split("/").pop()?.split("?")[0] ?? "document");
         } catch (resourceError) {
-          // Fallback: if resourceUri looks like a file path, try reading directly
+          // Fallback: if resourceUri looks like a file path, try reading directly.
+          // SECURITY: only read inside the allow-listed directories.
           if (args.resourceUri.startsWith("file://")) {
-            const filePath = args.resourceUri.replace("file://", "");
+            const filePath = fileUriToPath(args.resourceUri);
+            if (!filePath) {
+              throw new Error(
+                "Invalid file:// resourceUri (only local file URIs are supported)."
+              );
+            }
+            const readErr = validateReadPath(filePath);
+            if (readErr) {
+              throw new Error(readErr);
+            }
             fileBuffer = await readFile(filePath);
             actualFileName = args.fileName || (filePath.split("/").pop() ?? "document");
           } else {
@@ -224,6 +239,12 @@ Only call this tool when you have access to a local filesystem.`,
     filename?: string;
   }) => {
     try {
+      // SECURITY: confine the write to an allow-listed directory.
+      const saveErr = validateSavePath(args.outputPath);
+      if (saveErr) {
+        throw new Error(saveErr);
+      }
+
       // Download from API
       const fileContent = await client.downloadDocument(
         args.documentId,

@@ -1,3 +1,5 @@
+import { timingSafeEqual } from "node:crypto";
+
 import { FastMCP } from "fastmcp";
 
 import { FoxitPDFClient } from "./client";
@@ -64,9 +66,35 @@ export const foxitClient = new FoxitPDFClient({
 });
 
 // Create MCP server
+//
+// SECURITY: when MCP_AUTH_TOKEN is set, the HTTP transport requires a matching
+// `Authorization: Bearer <token>` header. Returning `authenticated: false`
+// makes fastmcp reject the request before any tool can run. When the token is
+// unset the server is intended for local/stdio use only (bind to 127.0.0.1).
+const authToken = config.authToken;
+function authenticate(request?: import("node:http").IncomingMessage) {
+  // stdio transport calls this with no request — it is a local, trusted
+  // channel, so it is always allowed. Token enforcement applies to HTTP only.
+  if (!request || !authToken) {
+    return Promise.resolve({ authenticated: true } as Record<string, unknown>);
+  }
+  const header = request?.headers?.authorization;
+  const presented = header?.startsWith("Bearer ") ? header.slice(7) : "";
+  const expected = authToken;
+  const a = Buffer.from(presented);
+  const b = Buffer.from(expected);
+  const ok = a.length === b.length && timingSafeEqual(a, b);
+  return Promise.resolve(
+    ok
+      ? ({ authenticated: true } as Record<string, unknown>)
+      : ({ authenticated: false, error: "Invalid or missing bearer token" } as Record<string, unknown>)
+  );
+}
+
 export const server = new FastMCP({
   name: "Foxit PDF API MCP Server",
   version: VERSION,
+  authenticate,
   health: {
     // Enable / disable (default: true)
     enabled: true,

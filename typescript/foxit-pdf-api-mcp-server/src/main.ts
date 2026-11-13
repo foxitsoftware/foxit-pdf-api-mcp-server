@@ -35,11 +35,12 @@ Usage:
 
 Options:
   --transport <stdio|httpStream>   Transport type (default: stdio)
-  --host <host>                    HTTP stream host (default: 0.0.0.0)
+  --host <host>                    HTTP stream host (default: 127.0.0.1)
   --port <port>                    HTTP stream port (default: 8080)
   --endpoint <path>                HTTP stream endpoint (default: /mcp)
   --stateless                      Enable stateless HTTP stream mode
   --enable-json-response           Enable JSON response mode for HTTP stream
+  --auth-token <token>             Bearer token required for HTTP requests
   --ssl-cert <path>                Path to SSL certificate
   --ssl-key <path>                 Path to SSL private key
   --ssl-ca <path>                  Path to SSL CA bundle
@@ -49,18 +50,28 @@ Environment Variables:
   FOXIT_CLOUD_API_HOST             Foxit API base URL
   FOXIT_CLOUD_API_CLIENT_ID        Foxit API client ID
   FOXIT_CLOUD_API_CLIENT_SECRET    Foxit API client secret
-  SERVER_HOST                      Default HTTP stream host (default: 0.0.0.0)
+  SERVER_HOST                      Default HTTP stream host (default: 127.0.0.1)
   SERVER_PORT                      Default HTTP stream port (default: 8080)
+  MCP_AUTH_TOKEN                   Bearer token required for HTTP requests
+  MCP_FS_ALLOWED_DIRS              Colon-separated dirs upload/download may touch
+                                   (default: ~/Downloads:~/Desktop:~/Documents:<tmp>)
+
+Security:
+  The HTTP transport binds to loopback (127.0.0.1) by default. If you expose it
+  on another interface (e.g. --host 0.0.0.0), you MUST also set a token via
+  --auth-token or MCP_AUTH_TOKEN. Upload/download are confined to
+  MCP_FS_ALLOWED_DIRS.
 
 Examples:
   # Run with stdio transport (default)
   npx @foxitsoftware/foxit-pdf-api-mcp-server --transport stdio
 
-  # Run with HTTP stream transport on port 9000
+  # Run with HTTP stream transport on loopback
   npx @foxitsoftware/foxit-pdf-api-mcp-server --transport httpStream --port 9000
 
-  # Run with HTTP stream on a specific host and port
-  npx @foxitsoftware/foxit-pdf-api-mcp-server --transport httpStream --host 127.0.0.1 --port 8080
+  # Expose on all interfaces with a required bearer token
+  MCP_AUTH_TOKEN=secret npx @foxitsoftware/foxit-pdf-api-mcp-server \\
+    --transport httpStream --host 0.0.0.0 --port 8080
 `;
 
 function parseCliArgs() {
@@ -75,6 +86,7 @@ function parseCliArgs() {
       "ssl-cert": { type: "string" },
       "ssl-key": { type: "string" },
       "ssl-ca": { type: "string" },
+      "auth-token": { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
     allowNegative: true,
@@ -112,11 +124,24 @@ async function main() {
   }
 
   // HTTP stream transport
-  const host = args.host ?? process.env.SERVER_HOST ?? "0.0.0.0";
+  const host = args.host ?? process.env.SERVER_HOST ?? "127.0.0.1";
   const port = parseInt(args.port ?? process.env.SERVER_PORT ?? "8080", 10);
 
   if (Number.isNaN(port) || port < 0 || port > 65535) {
     console.error(`Error: Invalid port "${args.port}". Must be a number between 0 and 65535.`);
+    process.exit(1);
+  }
+
+  // SECURITY: refuse to expose a non-loopback listener without an auth token.
+  const authToken = args["auth-token"] ?? process.env.MCP_AUTH_TOKEN ?? "";
+  if (authToken) {
+    process.env.MCP_AUTH_TOKEN = authToken;
+  }
+  if (!isLoopbackHost(host) && !authToken) {
+    console.error(
+      `Error: refusing to bind HTTP transport to non-loopback host "${host}" without authentication.\n` +
+        `Set a token via --auth-token or MCP_AUTH_TOKEN, or bind to 127.0.0.1.`
+    );
     process.exit(1);
   }
 
@@ -140,3 +165,12 @@ main().catch((error) => {
   console.error("Failed to start server:", error);
   process.exit(1);
 });
+
+function isLoopbackHost(host: string): boolean {
+  return (
+    host === "127.0.0.1" ||
+    host === "::1" ||
+    host === "localhost" ||
+    host === "[::1]"
+  );
+}

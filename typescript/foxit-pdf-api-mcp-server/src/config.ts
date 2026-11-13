@@ -42,6 +42,12 @@ export const config = {
   pollInterval: 2000, // 2 seconds
   requestTimeout: 30000, // 30 seconds (per HTTP request)
   maxRetries: 3,
+  /**
+   * Optional bearer token protecting the HTTP transport. When set, every
+   * HTTP MCP request must present it via `Authorization: Bearer <token>`.
+   * Recommended whenever the server is not bound to loopback.
+   */
+  authToken: process.env.MCP_AUTH_TOKEN ?? "",
 };
 
 export type Config = typeof config;
