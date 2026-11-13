@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import type { FoxitPDFClient } from "../client";
-import { executeAndWait } from "../utils/task-poller";
 
 /**
  * Convert Word to PDF tool
@@ -32,21 +31,17 @@ Workflow:
   }),
   execute: async (args: { documentId: string }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfFromWord(args.documentId)
-      );
-
+      const { taskId } = await client.pdfFromWord(args.documentId);
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
-        message: `Word document converted to PDF successfully. Download using documentId: ${result.resultDocumentId}`,
+        taskId,
+        message: "Word to PDF conversion submitted. Use get_task_result to check status and retrieve the download link.",
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "CONVERSION_FAILED",
+        errorType: (error as { code?: string }).code ?? "CONVERSION_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }

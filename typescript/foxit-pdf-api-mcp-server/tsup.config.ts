@@ -1,7 +1,7 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig({
-  entry: ["src/server.ts", "src/index.ts", "src/stdio-server.ts", "src/http-server.ts"],
+  entry: ["src/server.ts", "src/index.ts", "src/main.ts"],
   format: ["esm"],
   dts: true,
   splitting: false,
@@ -9,7 +9,6 @@ export default defineConfig({
   clean: true,
   outDir: "dist",
   platform: "node",
-  target: "node18",
   bundle: true,
   external: ["fastmcp", "zod"],
 });

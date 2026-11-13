@@ -1,6 +1,5 @@
 # Build stage
-# FROM jfrog.foxitsoftware.com/docker-release/cops/node:23.4-alpine3.20 AS builder
-FROM node:22-alpine3.20 AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -20,8 +19,7 @@ COPY . .
 RUN pnpm run build
 
 # Production stage
-# FROM jfrog.foxitsoftware.com/docker-release/cops/node:23.4-alpine3.20
-FROM node:22-alpine3.20 AS production
+FROM node:24-alpine AS production
 
 WORKDIR /app
 

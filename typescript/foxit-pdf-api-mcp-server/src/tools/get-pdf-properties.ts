@@ -23,8 +23,8 @@ Information returned:
 - Page-level information (rotation, dimensions, scan detection)
 
 Configuration options:
-- includeExtendedInfo: Get detailed metadata (fonts, signatures, encryption details)
-- includePageInfo: Include per-page information (dimensions, rotation, scan detection)
+- include_extended_info: Get detailed metadata (fonts, signatures, encryption details)
+- include_page_info: Include per-page information (dimensions, rotation, scan detection)
 
 Use cases:
 - Verify PDF structure before processing
@@ -35,9 +35,10 @@ Use cases:
 
 Workflow:
 1. Upload PDF using upload_document tool
-2. Call this tool with documentId
-3. Receive JSON data with all properties
-4. No download needed - data is returned directly`,
+2. Call this tool with document_id
+3. Receive JSON data with all properties (no download needed — data is returned directly)
+
+Password-protected PDFs: provide the password parameter if the PDF requires one.`,
   parameters: z.object({
     documentId: z
       .string()

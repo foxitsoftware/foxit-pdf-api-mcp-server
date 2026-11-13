@@ -1,6 +1,9 @@
 // Document lifecycle tools
 export * from "./document-lifecycle";
 
+// Task status
+export * from "./task-status";
+
 // PDF creation tools (to PDF)
 export * from "./pdf-from-word";
 export * from "./pdf-from-excel";
@@ -18,6 +21,7 @@ export * from "./pdf-conversions"; // pdfToPpt, pdfToHtml, pdfToText, pdfToImage
 // PDF management tools
 export * from "./pdf-merge";
 export * from "./pdf-protect";
+export * from "./pdf-redact";
 export * from "./get-pdf-properties";
 
 // PDF advanced operations (manipulation, security, enhancement)

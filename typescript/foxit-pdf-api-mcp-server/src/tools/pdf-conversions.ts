@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import type { FoxitPDFClient } from "../client";
-import { executeAndWait } from "../utils/task-poller";
 
 export const pdfToPptTool = (client: FoxitPDFClient) => ({
   name: "pdf_to_ppt",
@@ -22,28 +21,24 @@ Note: Complex layouts may require manual adjustment.
 Workflow:
 1. Upload PDF using upload_document tool
 2. Call this tool with the documentId
-3. Download PowerPoint result using download_document tool`,
+3. Use get_task_result to poll for completion and retrieve the download link`,
   parameters: z.object({
     documentId: z.string().describe("Document ID of the uploaded PDF file"),
     password: z.string().optional().describe("Password if PDF is password-protected"),
   }),
   execute: async (args: { documentId: string; password?: string }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfToPpt(args.documentId, args.password)
-      );
-
+      const { taskId } = await client.pdfToPpt(args.documentId, args.password);
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
-        message: `PDF converted to PowerPoint successfully. Download using documentId: ${result.resultDocumentId}`,
+        taskId,
+        message: "PDF to PowerPoint conversion submitted. Use get_task_result to check status and retrieve the download link.",
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "CONVERSION_FAILED",
+        errorType: (error as { code?: string }).code ?? "CONVERSION_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }
@@ -68,28 +63,24 @@ Best for:
 Workflow:
 1. Upload PDF using upload_document tool
 2. Call this tool with the documentId
-3. Download HTML result using download_document tool`,
+3. Use get_task_result to poll for completion and retrieve the download link`,
   parameters: z.object({
     documentId: z.string().describe("Document ID of the uploaded PDF file"),
     password: z.string().optional().describe("Password if PDF is password-protected"),
   }),
   execute: async (args: { documentId: string; password?: string }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfToHtml(args.documentId, args.password)
-      );
-
+      const { taskId } = await client.pdfToHtml(args.documentId, args.password);
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
-        message: `PDF converted to HTML successfully. Download using documentId: ${result.resultDocumentId}`,
+        taskId,
+        message: "PDF to HTML conversion submitted. Use get_task_result to check status and retrieve the download link.",
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "CONVERSION_FAILED",
+        errorType: (error as { code?: string }).code ?? "CONVERSION_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }
@@ -115,28 +106,24 @@ Best for:
 Workflow:
 1. Upload PDF using upload_document tool
 2. Call this tool with the documentId
-3. Download text result using download_document tool`,
+3. Use get_task_result to poll for completion and retrieve the download link`,
   parameters: z.object({
     documentId: z.string().describe("Document ID of the uploaded PDF file"),
     password: z.string().optional().describe("Password if PDF is password-protected"),
   }),
   execute: async (args: { documentId: string; password?: string }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfToText(args.documentId, args.password)
-      );
-
+      const { taskId } = await client.pdfToText(args.documentId, args.password);
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
-        message: `PDF converted to text successfully. Download using documentId: ${result.resultDocumentId}`,
+        taskId,
+        message: "PDF to text conversion submitted. Use get_task_result to check status and retrieve the download link.",
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "CONVERSION_FAILED",
+        errorType: (error as { code?: string }).code ?? "CONVERSION_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }
@@ -169,7 +156,7 @@ Best for:
 Workflow:
 1. Upload PDF using upload_document tool
 2. Call this tool with documentId and config
-3. Download image(s) using download_document tool`,
+3. Use get_task_result to poll for completion and retrieve the download link`,
   parameters: z.object({
     documentId: z.string().describe("Document ID of the uploaded PDF file"),
     config: z
@@ -199,22 +186,18 @@ Workflow:
     password?: string;
   }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfToImage(args.documentId, args.config, args.password)
-      );
-
+      const { taskId } = await client.pdfToImage(args.documentId, args.config, args.password);
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
+        taskId,
         config: args.config,
-        message: `PDF converted to image(s) successfully. Download using documentId: ${result.resultDocumentId}`,
+        message: "PDF to image conversion submitted. Use get_task_result to check status and retrieve the download link.",
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "CONVERSION_FAILED",
+        errorType: (error as { code?: string }).code ?? "CONVERSION_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }

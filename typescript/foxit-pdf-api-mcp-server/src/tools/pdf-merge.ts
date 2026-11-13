@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import type { FoxitPDFClient } from "../client";
-import { executeAndWait } from "../utils/task-poller";
 
 /**
  * Merge PDFs tool
@@ -25,7 +24,7 @@ Workflow:
 1. Upload all PDF files using upload_document tool
 2. Collect all documentIds
 3. Call this tool with the array of documents
-4. Download merged result using download_document tool`,
+3. Use get_task_result to poll for completion and retrieve the download link`,
   parameters: z.object({
     documents: z
       .array(
@@ -44,22 +43,18 @@ Workflow:
     documents: Array<{ documentId: string; password?: string }>;
   }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfMerge(args.documents)
-      );
-
+      const { taskId } = await client.pdfMerge(args.documents);
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
+        taskId,
         documentsCount: args.documents.length,
-        message: `${args.documents.length} PDFs merged successfully. Download using documentId: ${result.resultDocumentId}`,
+        message: `PDF merge (${args.documents.length} documents) submitted. Use get_task_result to check status and retrieve the download link.`,
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "MERGE_FAILED",
+        errorType: (error as { code?: string }).code ?? "MERGE_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }

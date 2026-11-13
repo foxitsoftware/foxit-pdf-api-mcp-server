@@ -69,18 +69,13 @@ Workflow:
         success: true,
         taskId: result.taskId,
         resultDocumentId: result.resultDocumentId,
-        protection: {
-          hasUserPassword: !!args.userPassword,
-          hasOwnerPassword: !!args.ownerPassword,
-          permissions: args.permissions ?? [],
-        },
-        message: `PDF protected successfully. Download using documentId: ${result.resultDocumentId}`,
+        message: `PDF protected successfully. Use get_task_result if needed, or download using documentId: ${result.resultDocumentId}`,
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "PROTECT_FAILED",
+        errorType: (error as { code?: string }).code ?? "PROTECT_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }

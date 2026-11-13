@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import type { FoxitPDFClient } from "../client";
-import { executeAndWait } from "../utils/task-poller";
 
 export const pdfFromUrlTool = (client: FoxitPDFClient) => ({
   name: "pdf_from_url",
@@ -31,8 +30,7 @@ Common use cases:
 
 Workflow:
 1. Call this tool with the URL and optional config
-2. Wait for conversion to complete
-3. Download result using download_document tool`,
+2. Use get_task_result to poll for completion and retrieve the download link`,
   parameters: z.object({
     url: z.string().url().describe("The web page URL to convert"),
     config: z
@@ -60,22 +58,18 @@ Workflow:
     };
   }) => {
     try {
-      const result = await executeAndWait(client, () =>
-        client.pdfFromUrl(args.url, args.config)
-      );
-
+      const { taskId } = await client.pdfFromUrl(args.url, args.config);
       return JSON.stringify({
         success: true,
-        taskId: result.taskId,
-        resultDocumentId: result.resultDocumentId,
+        taskId,
         url: args.url,
-        message: `Web page converted to PDF successfully. Download using documentId: ${result.resultDocumentId}`,
+        message: "URL to PDF conversion submitted. Use get_task_result to check status and retrieve the download link.",
       });
     } catch (error) {
       return JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        code: (error as { code?: string }).code ?? "CONVERSION_FAILED",
+        errorType: (error as { code?: string }).code ?? "CONVERSION_FAILED",
         taskId: (error as { taskId?: string }).taskId,
       });
     }

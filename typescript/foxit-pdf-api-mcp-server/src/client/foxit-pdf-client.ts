@@ -6,6 +6,12 @@ import type {
   TaskResponse,
 } from "../types/api";
 
+export interface ShareLinkResponse {
+  shareUrl: string;
+  token: string;
+  expiresAt: string;
+}
+
 /**
  * HTTP Client for Foxit PDF API
  * Handles all direct API interactions without MCP-specific logic
@@ -80,6 +86,31 @@ export class FoxitPDFClient {
     if (!response.ok) {
       throw await this.createApiError(response);
     }
+  }
+
+  /**
+   * Create a time-limited public share link for a document
+   */
+  async createShareLink(
+    documentId: string,
+    expirationMinutes?: number,
+    filename?: string
+  ): Promise<ShareLinkResponse> {
+    const payload: Record<string, unknown> = {};
+    if (expirationMinutes !== undefined) payload.expirationMinutes = expirationMinutes;
+    if (filename !== undefined) payload.filename = filename;
+
+    const response = await this.fetchWithAuth(
+      `/api/documents/${documentId}/share`,
+      {
+        method: "POST",
+        ...(Object.keys(payload).length > 0
+          ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+          : {}),
+      }
+    );
+
+    return this.handleResponse<ShareLinkResponse>(response);
   }
 
   /**
@@ -392,6 +423,52 @@ export class FoxitPDFClient {
     return this.submitOperation("/api/documents/security/pdf-remove-password", {
       documentId,
       password,
+    });
+  }
+
+  /**
+   * Redact sensitive content from a PDF
+   */
+  async pdfRedact(
+    documentId: string,
+    config: {
+      texts?: string[];
+      overlayText?: string;
+      pageRange?: string;
+      caseSensitive?: boolean;
+      wholeWordsOnly?: boolean;
+      redactFormFields?: boolean;
+      formFieldTypes?: string[];
+      applyImmediately?: boolean;
+    }
+  ): Promise<OperationResponse> {
+    const apiConfig: Record<string, unknown> = {};
+
+    if (config.texts?.length) {
+      apiConfig.redactTextList = config.texts.map((text) => ({
+        text,
+        ...(config.overlayText ? { overlayText: config.overlayText } : {}),
+      }));
+      const searchOptions: Record<string, unknown> = {};
+      if (config.caseSensitive) searchOptions.caseSensitive = true;
+      if (config.wholeWordsOnly) searchOptions.wholeWordsOnly = true;
+      if (config.pageRange) searchOptions.pageRange = config.pageRange;
+      if (Object.keys(searchOptions).length) apiConfig.textSearchOptions = searchOptions;
+    }
+
+    if (config.redactFormFields) {
+      apiConfig.formFieldRedact = config.formFieldTypes?.length
+        ? { fieldTypes: config.formFieldTypes }
+        : {};
+    }
+
+    if (config.applyImmediately === false) {
+      apiConfig.applyImmediately = false;
+    }
+
+    return this.submitOperation("/api/documents/security/pdf-redact", {
+      documentId,
+      config: apiConfig,
     });
   }
 
