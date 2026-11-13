@@ -59,6 +59,7 @@ export const foxitClient = new FoxitPDFClient({
   clientSecret: config.clientSecret,
   defaultTimeout: config.defaultTimeout,
   pollInterval: config.pollInterval,
+  requestTimeout: config.requestTimeout,
   maxRetries: config.maxRetries,
 });
 

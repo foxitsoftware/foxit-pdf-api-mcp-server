@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { FoxitPDFClient } from "../client";
+import { executeAndWait } from "../utils/task-poller";
 
 // ============ Analysis Tools ============
 
@@ -102,7 +103,7 @@ Workflow:
         args.documentId,
         {
           languages: args.languages,
-          pageRanges: args.pageRanges,
+          pageRange: args.pageRanges,
         },
         args.password
       );
@@ -233,7 +234,9 @@ Workflow:
   }),
   execute: async (args: { documentId: string; password?: string }) => {
     try {
-      const result = await client.exportPdfFormData(args.documentId, args.password);
+      const result = await executeAndWait(client, () =>
+        client.exportPdfFormData(args.documentId, args.password)
+      );
       return JSON.stringify({
         success: true,
         taskId: result.taskId,
@@ -308,7 +311,9 @@ Workflow:
     password?: string;
   }) => {
     try {
-      const result = await client.importPdfFormData(args.documentId, args.formData, args.password);
+      const result = await executeAndWait(client, () =>
+        client.importPdfFormData(args.documentId, args.formData, args.password)
+      );
       return JSON.stringify({
         success: true,
         taskId: result.taskId,

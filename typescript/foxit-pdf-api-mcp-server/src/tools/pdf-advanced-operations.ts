@@ -30,8 +30,8 @@ Use get_task_result to poll for completion and retrieve the download link.`,
     try {
       const { taskId } = await client.pdfSplit(
         args.documentId,
-        "BY_PAGE_COUNT",
-        { pageCount: args.pageCount },
+        args.pageCount,
+        undefined,
         args.password
       );
       return JSON.stringify({
@@ -60,15 +60,15 @@ two separate tools: pdf_extract_pages (for pages) and pdf_extract_text (for text
 
 Extract types:
 - TEXT: Extract all text content
-- IMAGES: Extract all images
-- PAGES: Extract specific pages
+- IMAGE: Extract all images
+- PAGE: Extract specific pages
 
 This operation runs asynchronously. The tool returns a taskId immediately.
 Use get_task_result to poll for completion and retrieve the download link.`,
   parameters: z.object({
     documentId: z.string().describe("Document ID of the PDF"),
     extractType: z
-      .enum(["TEXT", "IMAGES", "PAGES"])
+      .enum(["TEXT", "IMAGE", "PAGE"])
       .describe("Type of content to extract"),
     pageRanges: z
       .string()
@@ -86,7 +86,7 @@ Use get_task_result to poll for completion and retrieve the download link.`,
       const { taskId } = await client.pdfExtract(
         args.documentId,
         args.extractType,
-        { pageRanges: args.pageRanges },
+        args.pageRanges,
         args.password
       );
       return JSON.stringify({
@@ -134,8 +134,8 @@ Use get_task_result to poll for completion and retrieve the download link.`,
     try {
       const { taskId } = await client.pdfExtract(
         args.documentId,
-        "PAGES",
-        { pageRanges: args.page_range },
+        "PAGE",
+        args.page_range,
         args.password
       );
       return JSON.stringify({
@@ -181,7 +181,7 @@ When complete, the result includes a download link for the .txt file.`,
       const { taskId } = await client.pdfExtract(
         args.documentId,
         "TEXT",
-        { pageRanges: args.page_range },
+        args.page_range,
         args.password
       );
       return JSON.stringify({
@@ -599,7 +599,7 @@ Use get_task_result to poll for completion and retrieve the download link.`,
           rotation: args.rotation,
           fontSize: args.fontSize,
           color: args.color,
-          pageRanges: args.pageRanges,
+          pageRange: args.pageRanges,
         },
         args.password
       );

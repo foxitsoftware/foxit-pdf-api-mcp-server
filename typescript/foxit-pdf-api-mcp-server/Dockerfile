@@ -42,5 +42,5 @@ ENV SERVER_PORT=8080
 # Expose the port
 EXPOSE 8080
 
-# Start the HTTP server
-CMD ["node", "dist/http-server.js"]
+# Start the HTTP stream server
+CMD ["node", "dist/main.js", "--transport", "httpStream"]

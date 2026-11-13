@@ -2,8 +2,6 @@
 
 import { parseArgs } from "node:util";
 
-import { server } from "./server";
-
 /**
  * CLI entry point for the Foxit PDF API MCP Server.
  *
@@ -105,6 +103,8 @@ async function main() {
   }
 
   if (transportType === "stdio") {
+    // Load the server lazily so `--help` works without runtime config/env.
+    const { server } = await import("./server");
     await server.start({
       transportType: "stdio",
     });
@@ -120,6 +120,7 @@ async function main() {
     process.exit(1);
   }
 
+  const { server } = await import("./server");
   await server.start({
     transportType: "httpStream",
     httpStream: {

@@ -38,8 +38,9 @@ export const config = {
   apiBaseUrl: API_BASE_URL,
   clientId: CLIENT_ID,
   clientSecret: CLIENT_SECRET,
-  defaultTimeout: 300000, // 5 minutes
+  defaultTimeout: 300000, // 5 minutes (overall task-poll budget)
   pollInterval: 2000, // 2 seconds
+  requestTimeout: 30000, // 30 seconds (per HTTP request)
   maxRetries: 3,
 };
 

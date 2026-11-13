@@ -4,6 +4,21 @@
   "mcpName": "io.github.foxitsoftware/foxit-pdf-api-mcp-server",
   "private": false,
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
   "bin": {
     "foxit-pdf-api-mcp-server": "dist/main.js"
   },

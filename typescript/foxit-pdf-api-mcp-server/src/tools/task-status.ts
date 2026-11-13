@@ -88,9 +88,8 @@ Returns:
 
       // ── Failed ─────────────────────────────────────────────────────────
       if (["FAILED", "FAIL", "ERROR"].includes(rawStatus)) {
-        const errorInfo = (taskResponse as Record<string, unknown>).error as
-          | Record<string, unknown>
-          | undefined;
+        const errorInfo = (taskResponse as unknown as Record<string, unknown>)
+          .error as Record<string, unknown> | undefined;
         return JSON.stringify(
           {
             success: false,

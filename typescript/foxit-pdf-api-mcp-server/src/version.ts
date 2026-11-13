@@ -1,12 +1,8 @@
-import { readFileSync } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
+// Injected at build time by tsup `define` (see tsup.config.ts).
+declare const __VERSION__: string;
 
-// Get version from package.json
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const packageJson = JSON.parse(
-  readFileSync(join(__dirname, "../package.json"), "utf-8")
-);
-
-export const VERSION = packageJson.version;
+/**
+ * Package version, injected at build time.
+ * Typed as a semver template literal to satisfy FastMCP's `version` option.
+ */
+export const VERSION = __VERSION__ as `${number}.${number}.${number}`;

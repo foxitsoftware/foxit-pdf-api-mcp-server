@@ -61,7 +61,7 @@ Workflow:
         client.pdfProtect(args.documentId, {
           userPassword: args.userPassword,
           ownerPassword: args.ownerPassword,
-          permissions: args.permissions,
+          userPermissions: args.permissions,
         })
       );
 

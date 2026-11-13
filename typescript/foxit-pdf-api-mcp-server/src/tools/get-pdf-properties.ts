@@ -55,18 +55,27 @@ Password-protected PDFs: provide the password parameter if the PDF requires one.
       .describe(
         "Include per-page information (dimensions, rotation, scan detection). Default: true"
       ),
+    password: z
+      .string()
+      .optional()
+      .describe("Password if PDF is password-protected"),
   }),
   execute: async (args: {
     documentId: string;
     includeExtendedInfo?: boolean;
     includePageInfo?: boolean;
+    password?: string;
   }) => {
     try {
       const result = await executeAndWait(client, () =>
-        client.getPdfProperties(args.documentId, {
-          includeExtendedInfo: args.includeExtendedInfo ?? true,
-          includePageInfo: args.includePageInfo ?? true,
-        })
+        client.getPdfProperties(
+          args.documentId,
+          {
+            includeExtendedInfo: args.includeExtendedInfo ?? true,
+            includePageInfo: args.includePageInfo ?? true,
+          },
+          args.password
+        )
       );
 
       // This operation returns data, not a file

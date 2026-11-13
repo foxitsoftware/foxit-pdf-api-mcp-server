@@ -186,7 +186,17 @@ Workflow:
     password?: string;
   }) => {
     try {
-      const { taskId } = await client.pdfToImage(args.documentId, args.config, args.password);
+      const { taskId } = await client.pdfToImage(
+        args.documentId,
+        args.config
+          ? {
+              imageFormat: args.config.imageFormat,
+              dpi: args.config.dpi,
+              pageRange: args.config.pageRanges,
+            }
+          : undefined,
+        args.password
+      );
       return JSON.stringify({
         success: true,
         taskId,
