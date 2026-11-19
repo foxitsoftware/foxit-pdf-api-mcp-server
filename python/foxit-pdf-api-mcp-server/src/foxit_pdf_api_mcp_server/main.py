@@ -1,7 +1,6 @@
 """Main entry point for Foxit PDF API MCP Server."""
 
 import argparse
-import asyncio
 import os
 import sys
 
@@ -37,12 +36,14 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.transport == "stdio":
-        # Run in stdio mode (default for MCP clients like Claude Desktop)
-        asyncio.run(mcp.run())
+        # Run in stdio mode (the default transport for MCP clients).
+        # FastMCP.run() is synchronous and manages its own event loop, so it must
+        # not be wrapped in asyncio.run() (that raises TypeError on fastmcp>=3).
+        mcp.run()
     elif args.transport == "http":
         # Run in HTTP mode
         print(f"Starting Foxit PDF API MCP Server on http://{args.host}:{args.port}", file=sys.stderr)
-        asyncio.run(mcp.run(transport="http", host=args.host, port=args.port))
+        mcp.run(transport="http", host=args.host, port=args.port)
 
 
 if __name__ == "__main__":
